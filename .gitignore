@@ -7,3 +7,5 @@
 /docs-hub/node_modules/
 /docs-hub/dist/
 /docs-hub/*.tsbuildinfo
+__pycache__/
+*.pyc
