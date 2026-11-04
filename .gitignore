@@ -1,0 +1,9 @@
+# Root gitignore for devops-course
+.DS_Store
+.claude/
+.vscode/
+
+# Dependencies & Build artifacts (root-anchored)
+/docs-hub/node_modules/
+/docs-hub/dist/
+/docs-hub/*.tsbuildinfo
