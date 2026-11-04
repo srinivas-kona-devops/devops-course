@@ -1,0 +1,98 @@
+<!--title:1. Linux Admin|Root-level administration for the lab server|#6c8cff-->
+<div class="meta"><span>Ubuntu 24.04</span><span>root access</span><span>~60 min</span></div>
+<div class="card lab"><div class="t">Lab goal</div>Prepare one server that every later page reuses: users, keys, packages, services, disks, network, firewall, logs, kernel settings.</div>
+
+<h2><b>1.</b> How Linux fits together</h2>
+<figure><svg viewBox="0 0 640 230" width="640" role="img" aria-label="Linux layers">
+<rect x="20" y="10" width="600" height="46" rx="10" fill="#f472b6"/><text x="320" y="39" text-anchor="middle" fill="#fff" font-size="16">Users: shell (bash), remote login, your apps</text>
+<rect x="20" y="64" width="600" height="46" rx="10" fill="#a78bfa"/><text x="320" y="93" text-anchor="middle" fill="#fff" font-size="16">systemd (PID 1), services, cron, journald</text>
+<rect x="20" y="118" width="600" height="46" rx="10" fill="#6c8cff"/><text x="320" y="147" text-anchor="middle" fill="#fff" font-size="16">Kernel: processes, memory, cgroups, namespaces, netfilter</text>
+<rect x="20" y="172" width="600" height="46" rx="10" fill="#2dd4bf"/><text x="320" y="201" text-anchor="middle" fill="#0a0d1a" font-size="16">Hardware or virtual machine: CPU, RAM, disk, NIC</text></svg>
+<figcaption>Containers (page 3) are built from two kernel features: cgroups (limits) and namespaces (isolation).</figcaption></figure>
+
+<h2><b>2.</b> Become root and install base tools</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>sudo -i
+whoami; id; head -3 /etc/os-release
+apt update &amp;&amp; apt -y upgrade
+apt -y install curl wget git vim jq unzip tree htop net-tools dnsutils ca-certificates gnupg lsb-release python3-pip</code></pre></div>
+
+<h2><b>3.</b> Users, groups, sudo</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>adduser --disabled-password --gecos "" devops
+usermod -aG sudo devops
+echo "devops ALL=(ALL) NOPASSWD:ALL" &gt; /etc/sudoers.d/devops
+chmod 440 /etc/sudoers.d/devops &amp;&amp; visudo -c
+getent passwd devops; id devops</code></pre></div>
+<div class="card warn"><div class="t">Safety</div>Edit sudoers only through <code>visudo</code> or a file under <code>/etc/sudoers.d</code>, then validate with <code>visudo -c</code>. A syntax error can remove your sudo access.</div>
+
+<h2><b>4.</b> Key-based remote login and hardening</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>install -d -m 700 -o devops -g devops /home/devops/.ssh
+ssh-keygen -t ed25519 -f /root/lab_key -N "" -C lab
+cat /root/lab_key.pub &gt;&gt; /home/devops/.ssh/authorized_keys
+chown devops:devops /home/devops/.ssh/authorized_keys; chmod 600 /home/devops/.ssh/authorized_keys
+<span class="c"># open a SECOND terminal and confirm key login works before the next step</span>
+printf 'PasswordAuthentication no\nPermitRootLogin prohibit-password\n' &gt; /etc/ssh/sshd_config.d/99-hardening.conf
+sshd -t &amp;&amp; systemctl reload ssh</code></pre></div>
+
+<h2><b>5.</b> Files, permissions, search</h2>
+<!--dg:perm--><figure><svg viewBox="0 0 640 150" width="640" role="img" aria-label="Permission bits"><defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><rect x="20" y="15" width="80" height="50" rx="8" fill="#475085"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="60.0" y="36.8">-</tspan><tspan x="60.0" y="52.4">file type</tspan></text><rect x="130" y="15" width="160" height="50" rx="8" fill="#6c8cff"/><text font-size="22" fill="#fff" text-anchor="middle"><tspan x="210.0" y="47.7">rwx</tspan></text><rect x="320" y="15" width="160" height="50" rx="8" fill="#a78bfa"/><text font-size="22" fill="#fff" text-anchor="middle"><tspan x="400.0" y="47.7">r-x</tspan></text><rect x="510" y="15" width="110" height="50" rx="8" fill="#f472b6"/><text font-size="22" fill="#fff" text-anchor="middle"><tspan x="565.0" y="47.7">---</tspan></text><text x="60" y="85" font-size="12" text-anchor="middle" class="lb" >type</text><text x="210" y="85" font-size="12" text-anchor="middle" class="lb" >owner (u)</text><text x="400" y="85" font-size="12" text-anchor="middle" class="lb" >group (g)</text><text x="565" y="85" font-size="12" text-anchor="middle" class="lb" >others (o)</text><text x="210" y="105" font-size="13" text-anchor="middle" class="lb" >4+2+1 = 7</text><text x="400" y="105" font-size="13" text-anchor="middle" class="lb" >4+0+1 = 5</text><text x="565" y="105" font-size="13" text-anchor="middle" class="lb" >0</text><text x="320" y="135" font-size="14" text-anchor="middle" class="tx" font-weight="700">chmod 750 file   gives   -rwxr-x---</text></svg><figcaption>Read: r=4, write: w=2, execute: x=1. Add the digits for each class.</figcaption></figure>
+<table><tr><th>Task</th><th>Command</th></tr>
+<tr><td>List with details</td><td><code>ls -lah</code></td></tr>
+<tr><td>Permissions (r=4 w=2 x=1)</td><td><code>chmod 750 file</code>, <code>chown user:group file</code></td></tr>
+<tr><td>Find files</td><td><code>find /etc -name "*.conf" -mtime -1</code></td></tr>
+<tr><td>Search text</td><td><code>grep -rn "PermitRoot" /etc/ssh</code></td></tr>
+<tr><td>Disk usage</td><td><code>du -sh /var/* | sort -h</code></td></tr>
+<tr><td>Archive</td><td><code>tar czf /tmp/bk.tgz /etc; tar tzf /tmp/bk.tgz | head</code></td></tr></table>
+
+<h2><b>6.</b> Processes and systemd</h2>
+<!--dg:boot--><figure><svg viewBox="0 0 740 100" width="740" role="img" aria-label="Linux boot sequence"><defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><rect x="10" y="20" width="100" height="60" rx="8" fill="#475085"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="60.0" y="46.8">UEFI / BIOS</tspan><tspan x="60.0" y="62.4">POST</tspan></text><line x1="110" y1="50.0" x2="134" y2="50.0" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><rect x="134" y="20" width="100" height="60" rx="8" fill="#a78bfa"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="184.0" y="46.8">Bootloader</tspan><tspan x="184.0" y="62.4">GRUB</tspan></text><line x1="234" y1="50.0" x2="258" y2="50.0" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><rect x="258" y="20" width="100" height="60" rx="8" fill="#6c8cff"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="308.0" y="46.8">Kernel +</tspan><tspan x="308.0" y="62.4">initramfs</tspan></text><line x1="358" y1="50.0" x2="382" y2="50.0" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><rect x="382" y="20" width="100" height="60" rx="8" fill="#f472b6"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="432.0" y="46.8">systemd</tspan><tspan x="432.0" y="62.4">(PID 1)</tspan></text><line x1="482" y1="50.0" x2="506" y2="50.0" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><rect x="506" y="20" width="100" height="60" rx="8" fill="#f59e0b"/><text font-size="13" fill="#0a0d1a" text-anchor="middle"><tspan x="556.0" y="46.8">Target</tspan><tspan x="556.0" y="62.4">multi-user</tspan></text><line x1="606" y1="50.0" x2="630" y2="50.0" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><rect x="630" y="20" width="100" height="60" rx="8" fill="#34d399"/><text font-size="13" fill="#0a0d1a" text-anchor="middle"><tspan x="680.0" y="46.8">Login and</tspan><tspan x="680.0" y="62.4">services</tspan></text></svg><figcaption>Boot sequence. Failures at each stage have different tools: firmware setup, GRUB menu, dmesg, journalctl -b.</figcaption></figure>
+<figure><svg viewBox="0 0 640 110" width="640"><defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs>
+<g font-size="14" fill="#fff" text-anchor="middle"><rect x="10" y="30" width="120" height="44" rx="8" fill="#2dd4bf"/><text x="70" y="57" fill="#0a0d1a">inactive</text>
+<rect x="260" y="30" width="120" height="44" rx="8" fill="#34d399"/><text x="320" y="57" fill="#0a0d1a">active</text>
+<rect x="510" y="30" width="120" height="44" rx="8" fill="#f87171"/><text x="570" y="57">failed</text></g>
+<g stroke="#9aa3c7" stroke-width="2" marker-end="url(#a)"><line x1="130" y1="44" x2="258" y2="44"/><line x1="258" y1="62" x2="132" y2="62"/><line x1="380" y1="52" x2="508" y2="52"/></g>
+<g font-size="12" fill="#9aa3c7" text-anchor="middle"><text x="194" y="36">start</text><text x="194" y="82">stop</text><text x="444" y="44">crash</text></g></svg><figcaption>systemd unit states.</figcaption></figure>
+<div class="cmd"><span class="lang">bash</span><pre><code>ps aux --sort=-%mem | head -5
+systemctl status ssh --no-pager
+systemctl list-units --failed
+journalctl -u ssh -n 20 --no-pager
+cat &gt; /etc/systemd/system/hello.service &lt;&lt;'EOT'
+[Unit]
+Description=Hello demo
+[Service]
+ExecStart=/bin/bash -c 'while true; do echo hello; sleep 5; done'
+Restart=always
+[Install]
+WantedBy=multi-user.target
+EOT
+systemctl daemon-reload &amp;&amp; systemctl enable --now hello
+journalctl -u hello -n 3 --no-pager; systemctl disable --now hello</code></pre></div>
+
+<h2><b>7.</b> Disks and filesystems</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>lsblk -f; df -hT; findmnt /
+<span class="c"># practise on a loop file, never on a real disk</span>
+fallocate -l 200M /root/disk.img
+mkfs.ext4 -q /root/disk.img
+mkdir -p /mnt/lab &amp;&amp; mount -o loop /root/disk.img /mnt/lab
+df -h /mnt/lab; umount /mnt/lab</code></pre></div>
+
+<h2><b>8.</b> Networking and firewall</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>ip -br a; ip r; ss -tulpn
+dig +short example.com; curl -sI https://example.com | head -1
+ufw allow OpenSSH &amp;&amp; ufw allow 80,443/tcp
+ufw allow 6443/tcp; ufw allow 30000:32767/tcp   <span class="c"># Kubernetes API and NodePorts (lab only)</span>
+ufw --force enable &amp;&amp; ufw status verbose</code></pre></div>
+<div class="card warn"><div class="t">Order matters</div>Allow remote login before enabling <code>ufw</code>, or you will cut your own session. On cloud servers also check the provider security group.</div>
+
+<h2><b>9.</b> Logs, cron, performance</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>journalctl -p err -b --no-pager | tail
+(crontab -l 2&gt;/dev/null; echo "*/5 * * * * date &gt;&gt; /tmp/cron.log") | crontab -
+crontab -l
+uptime; free -h; vmstat 1 3</code></pre></div>
+
+<h2><b>10.</b> Kernel settings Kubernetes needs</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>swapoff -a &amp;&amp; sed -i '/ swap / s/^/#/' /etc/fstab
+printf 'overlay\nbr_netfilter\n' &gt; /etc/modules-load.d/k8s.conf
+modprobe overlay; modprobe br_netfilter
+printf 'net.bridge.bridge-nf-call-iptables=1\nnet.bridge.bridge-nf-call-ip6tables=1\nnet.ipv4.ip_forward=1\n' &gt; /etc/sysctl.d/k8s.conf
+sysctl --system | tail -3; sysctl net.ipv4.ip_forward</code></pre></div>
+<div class="card tip"><div class="t">Checkpoint</div>You can log in as <code>devops</code> with a key, <code>systemctl list-units --failed</code> is empty, and <code>sysctl net.ipv4.ip_forward</code> returns 1.</div>

@@ -1,0 +1,129 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5. Helm | DevOps Course</title><link rel="stylesheet" href="assets/course.css"></head><body>
+<nav class="side"><h2>DevOps Course</h2><a href="index.html">Home</a><a href="01-linux.html">1. Linux Admin</a><a href="02-git.html">2. Git</a><a href="03-docker.html">3. Docker</a><a href="04-kubernetes.html">4. Kubernetes</a><a href="05-helm.html" class=on>5. Helm</a><a href="06-istio.html">6. Istio</a><a href="07-ansible.html">7. Ansible</a><a href="08-jenkins.html">8. Jenkins</a><a href="09-terraform.html">9. Terraform</a><a href="10-aws.html">10. AWS Services</a><a href="11-capstone-k8s.html">11. Capstone A: Full App on Kubernetes</a><a href="12-capstone-platform.html">12. Capstone B: End-to-End Platform</a></nav><main><header class="hero"><h1>5. Helm</h1><p>Package, template, release and roll back Kubernetes applications</p></header>
+<div class="meta"><span>Helm 3</span><span>needs page 4 cluster</span><span>~60 min</span></div>
+
+<h2><b>1.</b> Concepts</h2>
+<figure><svg viewBox="0 0 680 150" width="680"><defs><marker id="h" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><g font-size="13" fill="#fff" text-anchor="middle">
+<rect x="10" y="20" width="130" height="50" rx="8" fill="#6c8cff"/><text x="75" y="50">Chart (templates)</text>
+<rect x="10" y="85" width="130" height="50" rx="8" fill="#f59e0b"/><text x="75" y="115" fill="#0a0d1a">values.yaml</text>
+<rect x="210" y="50" width="130" height="50" rx="8" fill="#a78bfa"/><text x="275" y="80">helm template</text>
+<rect x="410" y="50" width="120" height="50" rx="8" fill="#f472b6"/><text x="470" y="80">K8s YAML</text>
+<rect x="580" y="50" width="90" height="50" rx="8" fill="#34d399"/><text x="625" y="80" fill="#0a0d1a">Release</text></g>
+<g stroke="#9aa3c7" stroke-width="2" marker-end="url(#h)"><line x1="140" y1="45" x2="208" y2="68"/><line x1="140" y1="110" x2="208" y2="85"/><line x1="340" y1="75" x2="408" y2="75"/><line x1="530" y1="75" x2="578" y2="75"/></g></svg>
+<figcaption>A release is one installed instance of a chart. Helm stores release history in Secrets, which is what makes rollback possible.</figcaption></figure>
+
+<h2><b>2.</b> Install and use a public chart</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+helm version --short
+helm repo add bitnami https://charts.bitnami.com/bitnami &amp;&amp; helm repo update
+helm search repo nginx | head -5
+helm show values bitnami/nginx | head -40
+helm install demo bitnami/nginx -n helm-lab --create-namespace --set service.type=ClusterIP --set replicaCount=2
+helm list -A; helm status demo -n helm-lab
+helm get values demo -n helm-lab; helm get manifest demo -n helm-lab | head -20</code></pre></div>
+
+<h2><b>3.</b> Upgrade, history, rollback</h2>
+<!--dg:rev--><figure><svg viewBox="0 0 700 155" width="700" role="img" aria-label="Helm revisions"><defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><rect x="20" y="30" width="190" height="80" rx="8" fill="#475085"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="115.0" y="58.9">revision 1</tspan><tspan x="115.0" y="74.5">install</tspan><tspan x="115.0" y="90.1">superseded</tspan></text><rect x="255" y="30" width="190" height="80" rx="8" fill="#475085"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="350.0" y="58.9">revision 2</tspan><tspan x="350.0" y="74.5">upgrade replicas=3</tspan><tspan x="350.0" y="90.1">superseded</tspan></text><rect x="490" y="30" width="190" height="80" rx="8" fill="#34d399"/><text font-size="13" fill="#0a0d1a" text-anchor="middle"><tspan x="585.0" y="58.9">revision 3</tspan><tspan x="585.0" y="74.5">rollback to 1</tspan><tspan x="585.0" y="90.1">deployed</tspan></text><line x1="210" y1="70" x2="255" y2="70" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="232.5" y="62.0" font-size="11" text-anchor="middle" class="lb" >upgrade</text><line x1="445" y1="70" x2="490" y2="70" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="467.5" y="62.0" font-size="11" text-anchor="middle" class="lb" >rollback 1</text><text x="350" y="140" font-size="12" text-anchor="middle" class="lb" >Rollback never rewrites history: it creates a new revision with the old content.</text></svg><figcaption>Check with helm history. Release records live in Secrets in the release namespace.</figcaption></figure>
+<div class="cmd"><span class="lang">bash</span><pre><code>helm upgrade demo bitnami/nginx -n helm-lab --set service.type=ClusterIP --set replicaCount=3 --atomic --timeout 3m
+helm history demo -n helm-lab
+helm rollback demo 1 -n helm-lab --wait
+helm uninstall demo -n helm-lab</code></pre></div>
+<div class="card tip"><div class="t">Production flags</div><code>--atomic</code> rolls back automatically on failure, <code>--wait</code> blocks until pods are ready, <code>-f values-prod.yaml</code> keeps settings in Git, <code>helm diff upgrade</code> (plugin) previews changes.</div>
+
+<h2><b>4.</b> Write your own chart</h2>
+<!--dg:tree--><figure><svg viewBox="0 0 640 225" width="640" role="img" aria-label="Helm chart layout"><defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><rect x="10" y="8" width="620" height="206" rx="12" fill="#0a0d1a" stroke="#2a3050"/><text x="28" y="34" font-size="13" font-family="ui-monospace,Menlo,monospace" fill="#2dd4bf" xml:space="preserve">myapp/</text><text x="28" y="55" font-size="13" font-family="ui-monospace,Menlo,monospace" fill="#d7e0ff" xml:space="preserve">|-- Chart.yaml          name, version, dependencies</text><text x="28" y="76" font-size="13" font-family="ui-monospace,Menlo,monospace" fill="#d7e0ff" xml:space="preserve">|-- values.yaml         defaults you override</text><text x="28" y="97" font-size="13" font-family="ui-monospace,Menlo,monospace" fill="#d7e0ff" xml:space="preserve">|-- charts/             dependency charts</text><text x="28" y="118" font-size="13" font-family="ui-monospace,Menlo,monospace" fill="#2dd4bf" xml:space="preserve">`-- templates/</text><text x="28" y="139" font-size="13" font-family="ui-monospace,Menlo,monospace" fill="#d7e0ff" xml:space="preserve">    |-- _helpers.tpl    named snippets</text><text x="28" y="160" font-size="13" font-family="ui-monospace,Menlo,monospace" fill="#d7e0ff" xml:space="preserve">    |-- deployment.yaml</text><text x="28" y="181" font-size="13" font-family="ui-monospace,Menlo,monospace" fill="#d7e0ff" xml:space="preserve">    |-- service.yaml</text><text x="28" y="202" font-size="13" font-family="ui-monospace,Menlo,monospace" fill="#d7e0ff" xml:space="preserve">    `-- NOTES.txt       message after install</text></svg><figcaption>Everything under templates/ is rendered with values.yaml (plus --set overrides) into plain Kubernetes YAML.</figcaption></figure>
+<div class="cmd"><span class="lang">bash</span><pre><code>cd ~/lab &amp;&amp; helm create myapp &amp;&amp; tree myapp
+cat &gt; myapp/values.yaml &lt;&lt;'EOT'
+replicaCount: 2
+image:
+  repository: nginxinc/nginx-unprivileged
+  tag: "1.27-alpine"
+  pullPolicy: IfNotPresent
+service: {type: ClusterIP, port: 80, targetPort: 8080}
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 128Mi}
+config: {greeting: hello}
+EOT
+cat &gt; myapp/templates/deployment.yaml &lt;&lt;'EOT'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "myapp.fullname" . }}
+  labels: {{- include "myapp.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels: {{- include "myapp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "myapp.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ toYaml .Values.config | sha256sum }}
+    spec:
+      containers:
+      - name: app
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports: [{containerPort: {{ .Values.service.targetPort }}}]
+        env:
+        - {name: GREETING, value: {{ .Values.config.greeting | quote }}}
+        resources: {{- toYaml .Values.resources | nindent 10 }}
+EOT
+rm -f myapp/templates/{hpa,ingress,serviceaccount}.yaml myapp/templates/tests/*
+cat &gt; myapp/templates/service.yaml &lt;&lt;'EOT'
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "myapp.fullname" . }}
+spec:
+  type: {{ .Values.service.type }}
+  selector: {{- include "myapp.selectorLabels" . | nindent 4 }}
+  ports: [{port: {{ .Values.service.port }}, targetPort: {{ .Values.service.targetPort }}}]
+EOT
+helm lint myapp
+helm template rel myapp | head -40
+helm install rel myapp -n helm-lab --create-namespace --dry-run --debug | tail -5
+helm install rel myapp -n helm-lab --wait
+helm upgrade rel myapp -n helm-lab --set config.greeting=namaste --wait
+kubectl -n helm-lab exec deploy/rel-myapp -- printenv GREETING</code></pre></div>
+<div class="card"><div class="t">Why the checksum annotation</div>Pods do not restart when a ConfigMap changes. Putting a hash of the config in the pod template forces a rolling restart on <code>helm upgrade</code>.</div>
+
+<h3>Template syntax cheat sheet</h3>
+<table><tr><th>Syntax</th><th>Meaning</th></tr>
+<tr><td><code>{{ .Values.x }}</code></td><td>Value from values.yaml or <code>--set</code></td></tr>
+<tr><td><code>{{ .Release.Name }}</code></td><td>Release name, also <code>.Release.Namespace</code></td></tr>
+<tr><td><code>{{ include "name" . | nindent 4 }}</code></td><td>Reuse a named helper, indent on a new line</td></tr>
+<tr><td><code>{{- if .Values.enabled }} ... {{- end }}</code></td><td>Conditional block, <code>-</code> trims whitespace</td></tr>
+<tr><td><code>{{ default "x" .Values.y }}</code>, <code>quote</code>, <code>toYaml</code></td><td>Common functions</td></tr></table>
+
+<h2><b>5.</b> Package, dependencies, OCI registry</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>cd ~/lab
+helm package myapp                   <span class="c"># myapp-0.1.0.tgz</span>
+docker run -d -p 5000:5000 --name reg registry:2
+helm push myapp-0.1.0.tgz oci://localhost:5000/charts --plain-http
+helm show chart oci://localhost:5000/charts/myapp --plain-http | head -5
+docker rm -f reg
+<span class="c"># dependency example: add to Chart.yaml, then run helm dependency update</span>
+<span class="c"># dependencies:</span>
+<span class="c">#   - {name: redis, version: "&gt;=20.0.0", repository: "https://charts.bitnami.com/bitnami"}</span></code></pre></div>
+
+<h2><b>6.</b> Hooks and tests</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>cat &gt; ~/lab/myapp/templates/test.yaml &lt;&lt;'EOT'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "myapp.fullname" . }}-test
+  annotations: {"helm.sh/hook": test}
+spec:
+  restartPolicy: Never
+  containers:
+  - {name: curl, image: "curlimages/curl:8.10.1", command: ["curl","-sf","http://{{ include "myapp.fullname" . }}:{{ .Values.service.port }}"]}
+EOT
+helm upgrade rel ~/lab/myapp -n helm-lab --wait
+helm test rel -n helm-lab
+helm uninstall rel -n helm-lab; kubectl delete ns helm-lab</code></pre></div>
+<div class="card tip"><div class="t">Checkpoint</div><code>helm lint</code> passes, an upgrade changes the running environment variable, and <code>helm rollback</code> restores the previous revision.</div>
+
+<div class="pager"><a href="04-kubernetes.html">&larr; 4. Kubernetes</a><a href="06-istio.html">6. Istio &rarr;</a></div></main><script src="assets/course.js"></script></body></html>

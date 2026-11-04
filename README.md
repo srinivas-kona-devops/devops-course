@@ -22,3 +22,17 @@ npm run dev
 cd docs-hub
 npm run build
 ```
+
+## Hands-On Course (`course/`)
+
+Standalone offline HTML labs (no CDN) with diagrams and copy-ready commands. Published at `/course/` on GitHub Pages.
+
+Linux, Git, Docker, Kubernetes, Helm, Istio, Ansible, Jenkins, Terraform, AWS, plus two capstone application deployments.
+
+```bash
+python3 course/diagrams.py   # insert generated diagrams into course/_src (idempotent)
+python3 course/build.py      # render course/*.html from course/_src
+open course/index.html
+```
+
+Edit pages in `course/_src/`, then rebuild. The `course/*.html` files are generated and committed so the site works without a build step.

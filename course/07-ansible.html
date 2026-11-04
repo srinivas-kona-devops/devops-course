@@ -1,0 +1,144 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>7. Ansible | DevOps Course</title><link rel="stylesheet" href="assets/course.css"></head><body>
+<nav class="side"><h2>DevOps Course</h2><a href="index.html">Home</a><a href="01-linux.html">1. Linux Admin</a><a href="02-git.html">2. Git</a><a href="03-docker.html">3. Docker</a><a href="04-kubernetes.html">4. Kubernetes</a><a href="05-helm.html">5. Helm</a><a href="06-istio.html">6. Istio</a><a href="07-ansible.html" class=on>7. Ansible</a><a href="08-jenkins.html">8. Jenkins</a><a href="09-terraform.html">9. Terraform</a><a href="10-aws.html">10. AWS Services</a><a href="11-capstone-k8s.html">11. Capstone A: Full App on Kubernetes</a><a href="12-capstone-platform.html">12. Capstone B: End-to-End Platform</a></nav><main><header class="hero"><h1>7. Ansible</h1><p>Agentless configuration management and automation</p></header>
+<div class="meta"><span>ansible-core</span><span>SSH only, no agent</span><span>~75 min</span></div>
+
+<h2><b>1.</b> How it works</h2>
+<figure><svg viewBox="0 0 680 190" width="680"><defs><marker id="an" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><g font-size="13" fill="#fff" text-anchor="middle">
+<rect x="10" y="60" width="150" height="70" rx="10" fill="#f87171"/><text x="85" y="90">Control node</text><text x="85" y="110" font-size="11">ansible, playbooks</text>
+<rect x="260" y="10" width="100" height="40" rx="8" fill="#6c8cff"/><text x="310" y="35">Inventory</text>
+<rect x="260" y="140" width="100" height="40" rx="8" fill="#f59e0b"/><text x="310" y="165" fill="#0a0d1a">Playbook</text>
+<rect x="500" y="10" width="160" height="50" rx="8" fill="#2dd4bf"/><text x="580" y="40" fill="#0a0d1a">web1 (Python + SSH)</text>
+<rect x="500" y="70" width="160" height="50" rx="8" fill="#2dd4bf"/><text x="580" y="100" fill="#0a0d1a">web2</text>
+<rect x="500" y="130" width="160" height="50" rx="8" fill="#a78bfa"/><text x="580" y="160">db1</text></g>
+<g stroke="#9aa3c7" stroke-width="2" marker-end="url(#an)"><line x1="160" y1="80" x2="258" y2="35"/><line x1="160" y1="110" x2="258" y2="155"/><line x1="360" y1="30" x2="498" y2="35"/><line x1="360" y1="160" x2="498" y2="100"/><line x1="360" y1="165" x2="498" y2="155"/></g></svg>
+<figcaption>Ansible pushes small Python modules over SSH, runs them, and removes them. Modules are idempotent: running twice changes nothing the second time.</figcaption></figure>
+
+<h2><b>2.</b> Install and prepare a target</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>pipx install --include-deps ansible 2&gt;/dev/null || pip3 install --user ansible
+ansible --version
+mkdir -p ~/lab/ansible &amp;&amp; cd ~/lab/ansible
+cat &gt; ansible.cfg &lt;&lt;'EOT'
+[defaults]
+inventory = inventory.ini
+host_key_checking = False
+stdout_callback = yaml
+[privilege_escalation]
+become = True
+EOT
+cat &gt; inventory.ini &lt;&lt;'EOT'
+[web]
+localhost ansible_connection=local
+[db]
+localhost ansible_connection=local
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3
+EOT
+ansible-inventory --graph
+ansible all -m ping
+ansible all -m setup -a 'filter=ansible_distribution*'
+ansible all -m command -a 'uptime'</code></pre></div>
+<div class="card tip"><div class="t">Real servers</div>Replace <code>localhost ansible_connection=local</code> with <code>web1 ansible_host=10.0.0.11 ansible_user=devops ansible_ssh_private_key_file=~/.ssh/lab_key</code>.</div>
+
+<h2><b>3.</b> First playbook</h2>
+<!--dg:ans--><figure><svg viewBox="0 0 700 232" width="700" role="img" aria-label="Ansible structure"><defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><rect x="10" y="8" width="680" height="215" rx="12" fill="none" stroke="#f87171" stroke-width="2" stroke-dasharray="6"/><text x="22" y="26" font-size="13" fill="#f87171">Playbook: site.yml</text><rect x="30" y="36" width="640" height="175" rx="12" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="6"/><text x="42" y="54" font-size="13" fill="#a78bfa">Play: hosts web, vars</text><rect x="50" y="85" width="130" height="60" rx="8" fill="#6c8cff"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="115.0" y="112.0">Task 1</tspan><tspan x="115.0" y="126.4">apt install nginx</tspan></text><rect x="200" y="85" width="130" height="60" rx="8" fill="#6c8cff"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="265.0" y="112.0">Task 2</tspan><tspan x="265.0" y="126.4">template config</tspan></text><rect x="350" y="85" width="130" height="60" rx="8" fill="#6c8cff"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="415.0" y="112.0">Task 3</tspan><tspan x="415.0" y="126.4">service started</tspan></text><rect x="520" y="85" width="130" height="60" rx="8" fill="#f59e0b"/><text font-size="12" fill="#0a0d1a" text-anchor="middle"><tspan x="585.0" y="112.0">Handler</tspan><tspan x="585.0" y="126.4">reload nginx</tspan></text><line x1="180" y1="115" x2="200" y2="115" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><line x1="330" y1="115" x2="350" y2="115" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><path d="M265 78 Q 410 36 585 78" fill="none" stroke="#9aa3c7" stroke-width="2" stroke-dasharray="5" marker-end="url(#ar)"/><text x="430" y="52" font-size="11" text-anchor="middle" class="lb" >notify, runs once, only if changed</text><text x="115" y="170" font-size="11" text-anchor="middle" class="lb" >module: apt</text><text x="265" y="170" font-size="11" text-anchor="middle" class="lb" >module: template</text><text x="415" y="170" font-size="11" text-anchor="middle" class="lb" >module: service</text><text x="585" y="170" font-size="11" text-anchor="middle" class="lb" >module: service</text><text x="350" y="198" font-size="12" text-anchor="middle" class="lb" >Each module checks current state first, so a second run reports changed=0.</text></svg><figcaption>Playbook, play, task, module, handler: the five terms to know.</figcaption></figure>
+<div class="cmd"><span class="lang">bash</span><pre><code>cat &gt; site.yml &lt;&lt;'EOT'
+- name: Configure web servers
+  hosts: web
+  vars: {site_title: "Ansible lab", http_port: 8081}
+  tasks:
+  - name: Install nginx
+    ansible.builtin.apt: {name: nginx, state: present, update_cache: true, cache_valid_time: 3600}
+  - name: Deploy config
+    ansible.builtin.template: {src: site.conf.j2, dest: /etc/nginx/conf.d/lab.conf, mode: "0644"}
+    notify: Reload nginx
+  - name: Deploy page
+    ansible.builtin.copy: {content: "&lt;h1&gt;{{ site_title }}&lt;/h1&gt;\n", dest: /var/www/lab/index.html, mode: "0644"}
+    when: ansible_facts['os_family'] == "Debian"
+  - name: Ensure running
+    ansible.builtin.service: {name: nginx, state: started, enabled: true}
+  handlers:
+  - name: Reload nginx
+    ansible.builtin.service: {name: nginx, state: reloaded}
+EOT
+mkdir -p templates
+printf 'server {\n  listen {{ http_port }};\n  root /var/www/lab;\n}\n' &gt; templates/site.conf.j2
+mkdir -p /var/www/lab
+ansible-playbook site.yml --syntax-check
+ansible-playbook site.yml --check --diff      <span class="c"># dry run</span>
+ansible-playbook site.yml
+ansible-playbook site.yml                       <span class="c"># second run: changed=0 proves idempotency</span>
+curl -s localhost:8081</code></pre></div>
+
+<h2><b>4.</b> Variables, loops, conditionals, handlers</h2>
+<table><tr><th>Feature</th><th>Example</th></tr>
+<tr><td>Loop</td><td><code>loop: [git, curl, jq]</code> with <code>name: "{{ item }}"</code></td></tr>
+<tr><td>Conditional</td><td><code>when: ansible_memtotal_mb &gt; 2048</code></td></tr>
+<tr><td>Register output</td><td><code>register: result</code> then <code>result.stdout</code></td></tr>
+<tr><td>Error control</td><td><code>ignore_errors</code>, <code>failed_when</code>, <code>block/rescue/always</code></td></tr>
+<tr><td>Tags</td><td><code>tags: [config]</code> then <code>--tags config</code></td></tr>
+<tr><td>Precedence (low to high)</td><td>role defaults, inventory vars, play vars, <code>-e</code> extra vars</td></tr></table>
+
+<h2><b>5.</b> Roles (reusable structure)</h2>
+<figure><svg viewBox="0 0 560 170" width="560"><g font-size="13" fill="#fff"><rect x="10" y="10" width="540" height="150" rx="10" fill="#171b30" stroke="#f87171"/>
+<text x="25" y="35" fill="#f87171">roles/webserver/</text>
+<text x="45" y="60">tasks/main.yml        <tspan fill="#9aa3c7"> what to do</tspan></text>
+<text x="45" y="80">handlers/main.yml     <tspan fill="#9aa3c7"> reload and restart actions</tspan></text>
+<text x="45" y="100">templates/*.j2        <tspan fill="#9aa3c7"> Jinja2 files</tspan></text>
+<text x="45" y="120">defaults/main.yml     <tspan fill="#9aa3c7"> overridable variables</tspan></text>
+<text x="45" y="140">meta/main.yml         <tspan fill="#9aa3c7"> dependencies</tspan></text></g></svg></figure>
+<div class="cmd"><span class="lang">bash</span><pre><code>cd ~/lab/ansible
+ansible-galaxy role init roles/webserver
+cat &gt; roles/webserver/tasks/main.yml &lt;&lt;'EOT'
+- name: Install packages
+  ansible.builtin.apt: {name: "{{ web_packages }}", state: present}
+- name: Enable service
+  ansible.builtin.service: {name: nginx, state: started, enabled: true}
+EOT
+printf 'web_packages: [nginx, curl]\n' &gt; roles/webserver/defaults/main.yml
+printf -- '- hosts: web\n  roles: [webserver]\n' &gt; roles.yml
+ansible-playbook roles.yml
+ansible-galaxy collection install community.general ansible.posix</code></pre></div>
+
+<h2><b>6.</b> Secrets with Vault and dynamic inventory</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>echo 'lab-vault-pass' &gt; ~/.vault_pass &amp;&amp; chmod 600 ~/.vault_pass
+printf 'db_password: S3cret!\n' &gt; group_vars_secret.yml
+ansible-vault encrypt group_vars_secret.yml --vault-password-file ~/.vault_pass
+head -2 group_vars_secret.yml
+ansible-vault view group_vars_secret.yml --vault-password-file ~/.vault_pass
+<span class="c"># use in a play: vars_files: [group_vars_secret.yml]  then run with --vault-password-file</span>
+<span class="c"># AWS dynamic inventory (page 10): ansible-galaxy collection install amazon.aws, then use plugin: amazon.aws.aws_ec2</span></code></pre></div>
+
+<h2><b>7.</b> Hardening playbook example</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>cat &gt; harden.yml &lt;&lt;'EOT'
+- hosts: all
+  tasks:
+  - ansible.builtin.lineinfile: {path: /etc/ssh/sshd_config.d/99-lab.conf, line: "PermitRootLogin prohibit-password", create: true, mode: "0644"}
+    notify: Reload ssh
+  - ansible.builtin.apt: {name: [ufw, fail2ban, unattended-upgrades], state: present}
+  - community.general.ufw: {rule: allow, name: OpenSSH}
+  handlers:
+  - {name: Reload ssh, ansible.builtin.service: {name: ssh, state: reloaded}}
+EOT
+ansible-playbook harden.yml --check
+ansible-lint site.yml 2&gt;/dev/null || pip3 install --user ansible-lint</code></pre></div>
+<div class="card warn"><div class="t">Run <code>--check --diff</code> first</div>The hardening play touches remote login settings. Test on a disposable machine and keep a second session open.</div>
+
+<h2><b>8.</b> Using Ansible with Kubernetes</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>ansible-galaxy collection install kubernetes.core
+pip3 install --user kubernetes
+cat &gt; k8s.yml &lt;&lt;'EOT'
+- hosts: localhost
+  connection: local
+  tasks:
+  - kubernetes.core.k8s:
+      state: present
+      definition:
+        apiVersion: v1
+        kind: Namespace
+        metadata: {name: from-ansible}
+EOT
+ansible-playbook k8s.yml &amp;&amp; kubectl get ns from-ansible &amp;&amp; kubectl delete ns from-ansible</code></pre></div>
+<div class="card tip"><div class="t">Checkpoint</div>Second playbook run shows <code>changed=0</code>, and you can explain the difference between a role, a handler and a template.</div>
+
+<div class="pager"><a href="06-istio.html">&larr; 6. Istio</a><a href="08-jenkins.html">8. Jenkins &rarr;</a></div></main><script src="assets/course.js"></script></body></html>

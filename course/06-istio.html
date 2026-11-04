@@ -1,0 +1,136 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>6. Istio | DevOps Course</title><link rel="stylesheet" href="assets/course.css"></head><body>
+<nav class="side"><h2>DevOps Course</h2><a href="index.html">Home</a><a href="01-linux.html">1. Linux Admin</a><a href="02-git.html">2. Git</a><a href="03-docker.html">3. Docker</a><a href="04-kubernetes.html">4. Kubernetes</a><a href="05-helm.html">5. Helm</a><a href="06-istio.html" class=on>6. Istio</a><a href="07-ansible.html">7. Ansible</a><a href="08-jenkins.html">8. Jenkins</a><a href="09-terraform.html">9. Terraform</a><a href="10-aws.html">10. AWS Services</a><a href="11-capstone-k8s.html">11. Capstone A: Full App on Kubernetes</a><a href="12-capstone-platform.html">12. Capstone B: End-to-End Platform</a></nav><main><header class="hero"><h1>6. Istio</h1><p>Service mesh: traffic management, mTLS, observability</p></header>
+<div class="meta"><span>istioctl</span><span>needs page 4 cluster, 4 GB+ free RAM</span><span>~90 min</span></div>
+
+<h2><b>1.</b> Architecture</h2>
+<figure><svg viewBox="0 0 700 270" width="700"><defs><marker id="i" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs>
+<rect x="10" y="10" width="680" height="70" rx="12" fill="none" stroke="#f472b6" stroke-width="2" stroke-dasharray="6"/>
+<g font-size="13" fill="#fff" text-anchor="middle"><text x="70" y="30" fill="#f472b6">Control plane</text>
+<rect x="260" y="28" width="180" height="40" rx="8" fill="#a78bfa"/><text x="350" y="53">istiod (config, certs, discovery)</text></g>
+<g font-size="13" fill="#fff" text-anchor="middle">
+<rect x="20" y="130" width="140" height="120" rx="10" fill="#475085"/><text x="90" y="150">Pod A</text><rect x="35" y="160" width="50" height="40" rx="6" fill="#34d399"/><text x="60" y="185" fill="#0a0d1a">app</text><rect x="95" y="160" width="55" height="40" rx="6" fill="#f472b6"/><text x="122" y="185">envoy</text>
+<rect x="280" y="130" width="140" height="120" rx="10" fill="#475085"/><text x="350" y="150">Pod B v1</text><rect x="295" y="160" width="50" height="40" rx="6" fill="#34d399"/><text x="320" y="185" fill="#0a0d1a">app</text><rect x="355" y="160" width="55" height="40" rx="6" fill="#f472b6"/><text x="382" y="185">envoy</text>
+<rect x="540" y="130" width="140" height="120" rx="10" fill="#475085"/><text x="610" y="150">Pod B v2</text><rect x="555" y="160" width="50" height="40" rx="6" fill="#2dd4bf"/><text x="580" y="185" fill="#0a0d1a">app</text><rect x="615" y="160" width="55" height="40" rx="6" fill="#f472b6"/><text x="642" y="185">envoy</text></g>
+<g stroke="#9aa3c7" stroke-width="2" marker-end="url(#i)"><line x1="160" y1="180" x2="278" y2="180"/><line x1="420" y1="180" x2="538" y2="180"/><line x1="350" y1="68" x2="350" y2="128" stroke-dasharray="4"/></g>
+<text x="220" y="172" font-size="12" fill="#9aa3c7" text-anchor="middle">mTLS</text><text x="480" y="172" font-size="12" fill="#9aa3c7" text-anchor="middle">weighted</text></svg>
+<figcaption>Sidecar mode: each pod gets an Envoy proxy. istiod pushes routing rules and certificates; the proxies enforce them. Istio also offers ambient mode (no sidecars); this page uses the default profile with sidecars.</figcaption></figure>
+
+<h2><b>2.</b> Install</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>cd ~/lab &amp;&amp; curl -L https://istio.io/downloadIstio | sh -
+cd istio-* &amp;&amp; export PATH=$PWD/bin:$PATH
+istioctl x precheck
+istioctl install --set profile=demo -y
+kubectl -n istio-system get pods
+kubectl label namespace default istio-injection=enabled
+kubectl apply -f samples/addons/prometheus.yaml -f samples/addons/kiali.yaml -f samples/addons/jaeger.yaml
+kubectl -n istio-system rollout status deploy/kiali</code></pre></div>
+<div class="card"><div class="t">Profiles</div><code>demo</code> enables everything for learning. Use <code>default</code> for production, and pin the Istio version you test.</div>
+
+<h2><b>3.</b> Deploy Bookinfo and expose it</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>kubectl apply -f samples/bookinfo/platform/kube/bookinfo.yaml
+kubectl apply -f samples/bookinfo/networking/bookinfo-gateway.yaml
+kubectl get pods; kubectl get gateway,virtualservice
+istioctl analyze
+kubectl -n istio-system patch svc istio-ingressgateway -p '{"spec":{"type":"NodePort"}}'
+PORT=$(kubectl -n istio-system get svc istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="http2")].nodePort}')
+curl -s localhost:$PORT/productpage | grep -o "&lt;title&gt;.*&lt;/title&gt;"</code></pre></div>
+
+<h2><b>4.</b> Traffic management</h2>
+<!--dg:ireq--><figure><svg viewBox="0 0 720 250" width="720" role="img" aria-label="Istio request path"><defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><rect x="10" y="100" width="90" height="50" rx="8" fill="#475085"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="55.0" y="129.6">Client</tspan></text><rect x="130" y="90" width="100" height="70" rx="8" fill="#f472b6"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="180.0" y="114.8">Ingress</tspan><tspan x="180.0" y="129.2">Gateway</tspan><tspan x="180.0" y="143.6">(Envoy)</tspan></text><rect x="270" y="90" width="130" height="70" rx="8" fill="#a78bfa"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="335.0" y="114.8">VirtualService</tspan><tspan x="335.0" y="129.2">match and</tspan><tspan x="335.0" y="143.6">weights</tspan></text><rect x="440" y="90" width="130" height="70" rx="8" fill="#f59e0b"/><text font-size="11" fill="#0a0d1a" text-anchor="middle"><tspan x="505.0" y="115.6">DestinationRule</tspan><tspan x="505.0" y="128.8">subsets, mTLS,</tspan><tspan x="505.0" y="142.0">circuit breaker</tspan></text><rect x="630" y="40" width="80" height="44" rx="8" fill="#34d399"/><text font-size="12" fill="#0a0d1a" text-anchor="middle"><tspan x="670.0" y="59.0">reviews</tspan><tspan x="670.0" y="73.4">v1</tspan></text><rect x="630" y="166" width="80" height="44" rx="8" fill="#2dd4bf"/><text font-size="12" fill="#0a0d1a" text-anchor="middle"><tspan x="670.0" y="185.0">reviews</tspan><tspan x="670.0" y="199.4">v3</tspan></text><line x1="100" y1="125" x2="130" y2="125" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><line x1="230" y1="125" x2="270" y2="125" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><line x1="400" y1="125" x2="440" y2="125" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><line x1="570" y1="110" x2="630" y2="62" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="600.0" y="82.0" font-size="11" text-anchor="middle" class="lb" >90%</text><line x1="570" y1="140" x2="630" y2="188" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="600.0" y="174.0" font-size="11" text-anchor="middle" class="lb" >10%</text></svg><figcaption>The VirtualService decides where traffic goes; the DestinationRule defines what each destination subset means.</figcaption></figure>
+<h3>Route everything to v1, then canary 90/10</h3>
+<div class="cmd"><span class="lang">bash</span><pre><code>kubectl apply -f samples/bookinfo/networking/destination-rule-all.yaml
+cat &gt; ~/lab/reviews-canary.yaml &lt;&lt;'EOT'
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata: {name: reviews}
+spec:
+  hosts: [reviews]
+  http:
+  - route:
+    - {destination: {host: reviews, subset: v1}, weight: 90}
+    - {destination: {host: reviews, subset: v3}, weight: 10}
+EOT
+kubectl apply -f ~/lab/reviews-canary.yaml
+for i in $(seq 1 30); do curl -s localhost:$PORT/productpage | grep -c 'color="red"'; done | sort | uniq -c   <span class="c"># about 10% show red stars (v3)</span></code></pre></div>
+<h3>Header-based routing, fault injection, timeouts and retries</h3>
+<div class="cmd"><span class="lang">bash</span><pre><code>cat &gt; ~/lab/reviews-traffic.yaml &lt;&lt;'EOT'
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata: {name: ratings}
+spec:
+  hosts: [ratings]
+  http:
+  - match: [{headers: {end-user: {exact: jason}}}]
+    fault: {delay: {percentage: {value: 100}, fixedDelay: 5s}}
+    route: [{destination: {host: ratings, subset: v1}}]
+  - route: [{destination: {host: ratings, subset: v1}}]
+    timeout: 3s
+    retries: {attempts: 3, perTryTimeout: 1s}
+EOT
+kubectl apply -f ~/lab/reviews-traffic.yaml</code></pre></div>
+<div class="card"><div class="t">Circuit breaking</div>Add <code>trafficPolicy.outlierDetection</code> (eject a host after consecutive 5xx errors) and <code>connectionPool</code> limits in a <code>DestinationRule</code> to stop one failing replica from degrading callers.</div>
+
+<h2><b>5.</b> Security</h2>
+<!--dg:mtls--><figure><svg viewBox="0 0 760 260" width="760" role="img" aria-label="Istio mTLS flow"><defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><line x1="76.0" y1="48" x2="76.0" y2="254" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="16.0" y="8" width="120" height="40" rx="8" fill="#6c8cff"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="76.0" y="32.2">istiod</tspan></text><line x1="228.0" y1="48" x2="228.0" y2="254" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="168.0" y="8" width="120" height="40" rx="8" fill="#a78bfa"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="228.0" y="32.2">App A</tspan></text><line x1="380.0" y1="48" x2="380.0" y2="254" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="320.0" y="8" width="120" height="40" rx="8" fill="#f472b6"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="380.0" y="32.2">Envoy A</tspan></text><line x1="532.0" y1="48" x2="532.0" y2="254" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="472.0" y="8" width="120" height="40" rx="8" fill="#f59e0b"/><text font-size="12" fill="#0a0d1a" text-anchor="middle"><tspan x="532.0" y="32.2">Envoy B</tspan></text><line x1="684.0" y1="48" x2="684.0" y2="254" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="624.0" y="8" width="120" height="40" rx="8" fill="#2dd4bf"/><text font-size="12" fill="#0a0d1a" text-anchor="middle"><tspan x="684.0" y="32.2">App B</tspan></text><line x1="80.0" y1="86" x2="376.0" y2="86" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="228.0" y="80.0" font-size="11" text-anchor="middle" class="lb" >1 issue cert (SPIFFE ID)</text><line x1="80.0" y1="124" x2="528.0" y2="124" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="304.0" y="118.0" font-size="11" text-anchor="middle" class="lb" >1 issue cert (SPIFFE ID)</text><line x1="232.0" y1="162" x2="376.0" y2="162" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="304.0" y="156.0" font-size="11" text-anchor="middle" class="lb" >2 plain HTTP call</text><line x1="384.0" y1="200" x2="528.0" y2="200" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="456.0" y="194.0" font-size="11" text-anchor="middle" class="lb" >3 mTLS: verify both certs</text><line x1="536.0" y1="238" x2="680.0" y2="238" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="608.0" y="232.0" font-size="11" text-anchor="middle" class="lb" >4 plain HTTP to app</text></svg><figcaption>Applications stay unaware of TLS. The sidecars authenticate each other and encrypt the hop.</figcaption></figure>
+<div class="cmd"><span class="lang">bash</span><pre><code>cat &gt; ~/lab/security.yaml &lt;&lt;'EOT'
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata: {name: default, namespace: default}
+spec: {mtls: {mode: STRICT}}
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata: {name: ratings-allow-reviews, namespace: default}
+spec:
+  selector: {matchLabels: {app: ratings}}
+  action: ALLOW
+  rules:
+  - from: [{source: {principals: ["cluster.local/ns/default/sa/bookinfo-reviews"]}}]
+EOT
+kubectl apply -f ~/lab/security.yaml
+kubectl create ns legacy &amp;&amp; kubectl -n legacy run t --image=curlimages/curl:8.10.1 --restart=Never --command -- sleep 600
+kubectl -n legacy wait --for=condition=ready pod/t
+kubectl -n legacy exec t -- curl -s -m 3 http://ratings.default:9080/ratings/1; echo "exit=$?"   <span class="c"># blocked: no mesh identity</span>
+istioctl proxy-config secret deploy/ratings-v1 | head</code></pre></div>
+
+<h2><b>6.</b> Observability</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>istioctl dashboard kiali --address 0.0.0.0 &amp;     <span class="c"># graph, health, config validation</span>
+istioctl dashboard jaeger --address 0.0.0.0 &amp;    <span class="c"># distributed traces</span>
+kubectl -n istio-system port-forward svc/prometheus 9090 &amp;
+curl -s 'localhost:9090/api/v1/query?query=istio_requests_total' | jq '.data.result | length'</code></pre></div>
+<table><tr><th>Golden signal</th><th>Istio metric</th></tr><tr><td>Traffic</td><td><code>istio_requests_total</code></td></tr><tr><td>Errors</td><td><code>istio_requests_total{response_code=~"5.."}</code></td></tr><tr><td>Latency</td><td><code>istio_request_duration_milliseconds_bucket</code></td></tr></table>
+
+<h2><b>7.</b> Gateway API (modern ingress)</h2>
+<p>Istio supports the Kubernetes Gateway API, which is the recommended direction for new ingress configuration.</p>
+<div class="cmd"><span class="lang">bash</span><pre><code>kubectl get crd gateways.gateway.networking.k8s.io &gt;/dev/null 2&gt;&amp;1 || kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/standard-install.yaml
+cat &gt; ~/lab/gw.yaml &lt;&lt;'EOT'
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: {name: gateway}
+spec:
+  gatewayClassName: istio
+  listeners: [{name: http, port: 80, protocol: HTTP, allowedRoutes: {namespaces: {from: Same}}}]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: productpage}
+spec:
+  parentRefs: [{name: gateway}]
+  rules: [{matches: [{path: {type: PathPrefix, value: /productpage}}], backendRefs: [{name: productpage, port: 9080}]}]
+EOT
+kubectl apply -f ~/lab/gw.yaml; kubectl get gateway,httproute</code></pre></div>
+
+<h2><b>8.</b> Troubleshooting and clean up</h2>
+<table><tr><th>Symptom</th><th>Check</th></tr>
+<tr><td>No sidecar in pod</td><td>Namespace label, then restart pods: <code>kubectl rollout restart deploy</code></td></tr>
+<tr><td>503 or no route</td><td><code>istioctl analyze</code>, <code>istioctl proxy-status</code></td></tr>
+<tr><td>Config not applied</td><td><code>istioctl proxy-config routes deploy/NAME</code></td></tr>
+<tr><td>mTLS failures</td><td><code>istioctl x describe pod POD</code>, check PeerAuthentication mode</td></tr></table>
+<div class="cmd"><span class="lang">bash</span><pre><code>kubectl delete -f samples/bookinfo/platform/kube/bookinfo.yaml -f ~/lab/security.yaml --ignore-not-found
+kubectl delete ns legacy
+istioctl uninstall --purge -y &amp;&amp; kubectl delete ns istio-system
+kubectl label namespace default istio-injection-</code></pre></div>
+<div class="card tip"><div class="t">Checkpoint</div>You can split traffic by weight, inject a fault, enforce STRICT mTLS, and see the service graph in Kiali.</div>
+
+<div class="pager"><a href="05-helm.html">&larr; 5. Helm</a><a href="07-ansible.html">7. Ansible &rarr;</a></div></main><script src="assets/course.js"></script></body></html>

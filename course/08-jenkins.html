@@ -1,0 +1,143 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>8. Jenkins | DevOps Course</title><link rel="stylesheet" href="assets/course.css"></head><body>
+<nav class="side"><h2>DevOps Course</h2><a href="index.html">Home</a><a href="01-linux.html">1. Linux Admin</a><a href="02-git.html">2. Git</a><a href="03-docker.html">3. Docker</a><a href="04-kubernetes.html">4. Kubernetes</a><a href="05-helm.html">5. Helm</a><a href="06-istio.html">6. Istio</a><a href="07-ansible.html">7. Ansible</a><a href="08-jenkins.html" class=on>8. Jenkins</a><a href="09-terraform.html">9. Terraform</a><a href="10-aws.html">10. AWS Services</a><a href="11-capstone-k8s.html">11. Capstone A: Full App on Kubernetes</a><a href="12-capstone-platform.html">12. Capstone B: End-to-End Platform</a></nav><main><header class="hero"><h1>8. Jenkins</h1><p>CI/CD server, pipelines as code, agents, Docker and Kubernetes delivery</p></header>
+<div class="meta"><span>Jenkins LTS</span><span>Declarative Pipeline</span><span>~75 min</span></div>
+
+<h2><b>1.</b> Architecture and pipeline flow</h2>
+<figure><svg viewBox="0 0 700 170" width="700"><defs><marker id="j" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><g font-size="13" fill="#fff" text-anchor="middle">
+<rect x="10" y="50" width="90" height="50" rx="8" fill="#475085"/><text x="55" y="80">Git push</text>
+<rect x="130" y="50" width="110" height="50" rx="8" fill="#f59e0b"/><text x="185" y="80" fill="#0a0d1a">Controller</text>
+<rect x="270" y="10" width="90" height="40" rx="8" fill="#6c8cff"/><text x="315" y="35">Build</text>
+<rect x="270" y="60" width="90" height="40" rx="8" fill="#a78bfa"/><text x="315" y="85">Test</text>
+<rect x="270" y="110" width="90" height="40" rx="8" fill="#f472b6"/><text x="315" y="135">Image</text>
+<rect x="400" y="50" width="100" height="50" rx="8" fill="#2dd4bf"/><text x="450" y="80" fill="#0a0d1a">Registry</text>
+<rect x="540" y="50" width="150" height="50" rx="8" fill="#34d399"/><text x="615" y="80" fill="#0a0d1a">Deploy to Kubernetes</text></g>
+<g stroke="#9aa3c7" stroke-width="2" marker-end="url(#j)"><line x1="100" y1="75" x2="128" y2="75"/><line x1="240" y1="70" x2="268" y2="35"/><line x1="240" y1="75" x2="268" y2="80"/><line x1="240" y1="80" x2="268" y2="130"/><line x1="360" y1="130" x2="398" y2="85"/><line x1="500" y1="75" x2="538" y2="75"/></g></svg>
+<figcaption>The controller schedules work; agents execute it. Keep the controller free of builds (set its executors to 0).</figcaption></figure>
+
+<h2><b>2.</b> Install with Docker</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>mkdir -p ~/lab/jenkins &amp;&amp; cd ~/lab/jenkins
+cat &gt; Dockerfile &lt;&lt;'EOT'
+FROM jenkins/jenkins:lts-jdk17
+USER root
+RUN apt-get update &amp;&amp; apt-get install -y docker.io &amp;&amp; rm -rf /var/lib/apt/lists/* &amp;&amp; usermod -aG docker jenkins
+USER jenkins
+RUN jenkins-plugin-cli --plugins workflow-aggregator git configuration-as-code credentials-binding docker-workflow blueocean
+EOT
+cat &gt; compose.yaml &lt;&lt;'EOT'
+services:
+  jenkins:
+    build: .
+    user: root
+    ports: ["8088:8080", "50000:50000"]
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+volumes: {jenkins_home: {}}
+EOT
+docker compose up -d --build
+docker compose logs -f jenkins 2&gt;&amp;1 | grep -m1 -A2 "initialAdminPassword"
+docker compose exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword</code></pre></div>
+<div class="card warn"><div class="t">Lab shortcut</div>Mounting the Docker socket and running as root gives Jenkins full control of the host. That is acceptable for a throwaway lab. In production use separate agents (Kubernetes pod agents or ephemeral VMs) and rootless builders such as Kaniko or BuildKit.</div>
+<p>Open <code>http://SERVER_IP:8088</code>, paste the password, install suggested plugins, create the admin user.</p>
+
+<h2><b>3.</b> Your first Pipeline (Jenkinsfile)</h2>
+<div class="cmd"><span class="lang">groovy</span><pre><code>pipeline {
+  agent any
+  options { timestamps(); timeout(time: 20, unit: 'MINUTES'); buildDiscarder(logRotator(numToKeepStr: '15')) }
+  environment { IMAGE = "localhost:5000/hello" ; TAG = "${env.BUILD_NUMBER}" }
+  stages {
+    stage('Checkout') { steps { checkout scm } }
+    stage('Test')     { steps { sh 'python3 -m py_compile app.py' } }
+    stage('Build')    { steps { sh 'docker build -t $IMAGE:$TAG .' } }
+    stage('Push')     { steps { sh 'docker push $IMAGE:$TAG' } }
+    stage('Deploy')   {
+      when { branch 'main' }
+      steps { sh 'kubectl set image deploy/hello hello=$IMAGE:$TAG -n apps' }
+    }
+  }
+  post {
+    success { echo 'Pipeline succeeded' }
+    failure { echo 'Pipeline failed' }
+    always  { cleanWs() }
+  }
+}</code></pre></div>
+<p>Create a <b>Multibranch Pipeline</b> job pointing at your repository. Jenkins finds the <code>Jenkinsfile</code> on every branch and builds each one.</p>
+
+<h2><b>4.</b> Credentials, parameters, parallel, approvals</h2>
+<div class="cmd"><span class="lang">groovy</span><pre><code>pipeline {
+  agent any
+  parameters { choice(name: 'ENV', choices: ['dev', 'staging', 'prod'], description: 'Target') }
+  stages {
+    stage('Checks in parallel') {
+      parallel {
+        stage('Lint')     { steps { sh 'echo lint' } }
+        stage('Unit')     { steps { sh 'echo unit tests' } }
+        stage('Security') { steps { sh 'echo image scan' } }
+      }
+    }
+    stage('Approve prod') {
+      when { expression { params.ENV == 'prod' } }
+      steps { input message: 'Deploy to production?', ok: 'Deploy' }
+    }
+    stage('Use a secret') {
+      steps {
+        withCredentials([string(credentialsId: 'api-token', variable: 'TOKEN')]) {
+          sh 'curl -s -H "Authorization: Bearer $TOKEN" https://example.com -o /dev/null -w "%{http_code}\n"'
+        }
+      }
+    }
+  }
+}</code></pre></div>
+<div class="card"><div class="t">Never echo secrets</div>Add secrets under <b>Manage Jenkins, Credentials</b>. Reference them only through <code>withCredentials</code>; Jenkins masks the value in logs. Do not put secrets in the Jenkinsfile or in <code>environment</code> as plain text.</div>
+
+<h2><b>5.</b> Dynamic Kubernetes agents</h2>
+<!--dg:jagent--><figure><svg viewBox="0 0 760 298" width="760" role="img" aria-label="Jenkins dynamic agents"><defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><line x1="76.0" y1="48" x2="76.0" y2="292" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="16.0" y="8" width="120" height="40" rx="8" fill="#6c8cff"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="76.0" y="32.2">Developer</tspan></text><line x1="228.0" y1="48" x2="228.0" y2="292" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="168.0" y="8" width="120" height="40" rx="8" fill="#a78bfa"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="228.0" y="32.2">Git</tspan></text><line x1="380.0" y1="48" x2="380.0" y2="292" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="320.0" y="8" width="120" height="40" rx="8" fill="#f472b6"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="380.0" y="25.0">Jenkins</tspan><tspan x="380.0" y="39.4">controller</tspan></text><line x1="532.0" y1="48" x2="532.0" y2="292" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="472.0" y="8" width="120" height="40" rx="8" fill="#f59e0b"/><text font-size="12" fill="#0a0d1a" text-anchor="middle"><tspan x="532.0" y="25.0">Kubernetes</tspan><tspan x="532.0" y="39.4">API</tspan></text><line x1="684.0" y1="48" x2="684.0" y2="292" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="624.0" y="8" width="120" height="40" rx="8" fill="#2dd4bf"/><text font-size="12" fill="#0a0d1a" text-anchor="middle"><tspan x="684.0" y="32.2">Agent Pod</tspan></text><line x1="80.0" y1="86" x2="224.0" y2="86" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="152.0" y="80.0" font-size="11" text-anchor="middle" class="lb" >1 git push</text><line x1="232.0" y1="124" x2="376.0" y2="124" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="304.0" y="118.0" font-size="11" text-anchor="middle" class="lb" >2 webhook</text><line x1="384.0" y1="162" x2="528.0" y2="162" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="456.0" y="156.0" font-size="11" text-anchor="middle" class="lb" >3 create agent Pod</text><line x1="680.0" y1="200" x2="384.0" y2="200" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="532.0" y="194.0" font-size="11" text-anchor="middle" class="lb" >4 agent connects back</text><line x1="384.0" y1="238" x2="680.0" y2="238" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="532.0" y="232.0" font-size="11" text-anchor="middle" class="lb" >5 run stages</text><line x1="384.0" y1="276" x2="528.0" y2="276" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="456.0" y="270.0" font-size="11" text-anchor="middle" class="lb" >6 delete Pod when done</text></svg><figcaption>Each build gets a clean Pod, so there is no agent drift and no idle capacity.</figcaption></figure>
+<p>Each build runs in a fresh pod, so there is no agent drift and nothing to patch. Install the <b>Kubernetes</b> plugin and configure the cluster URL and credentials, then:</p>
+<div class="cmd"><span class="lang">groovy</span><pre><code>pipeline {
+  agent {
+    kubernetes {
+      yaml '''
+        apiVersion: v1
+        kind: Pod
+        spec:
+          containers:
+          - {name: tools, image: "alpine/k8s:1.30.4", command: [sleep], args: [infinity]}
+          - {name: kaniko, image: "gcr.io/kaniko-project/executor:debug", command: [sleep], args: [infinity]}
+      '''
+    }
+  }
+  stages {
+    stage('Deploy') { steps { container('tools') { sh 'kubectl version --client; helm version --short' } } }
+  }
+}</code></pre></div>
+
+<h2><b>6.</b> Configuration as Code and CLI</h2>
+<div class="cmd"><span class="lang">yaml</span><pre><code>cat &gt; jenkins.yaml &lt;&lt;'EOT'
+jenkins:
+  systemMessage: "Managed by JCasC"
+  numExecutors: 0
+  securityRealm:
+    local:
+      allowsSignup: false
+      users: [{id: admin, password: "${ADMIN_PASSWORD}"}]
+  authorizationStrategy:
+    loggedInUsersCanDoAnything: {allowAnonymousRead: false}
+EOT
+<span class="c"># mount it and set CASC_JENKINS_CONFIG=/var/jenkins_home/jenkins.yaml in compose.yaml</span>
+curl -s -u admin:$TOKEN http://localhost:8088/api/json?tree=jobs[name,color] | jq
+<span class="c"># jobs can be triggered from Git with a webhook to /github-webhook/ or /multibranch-webhook-trigger/invoke</span></code></pre></div>
+
+<h2><b>7.</b> Hardening and operations checklist</h2>
+<table><tr><th>Area</th><th>Action</th></tr>
+<tr><td>Access</td><td>Disable anonymous read, use SSO/RBAC, enable CSRF protection</td></tr>
+<tr><td>Controller</td><td>0 executors, put it behind HTTPS, restrict the script console</td></tr>
+<tr><td>Plugins</td><td>Install the minimum, update monthly, review security advisories</td></tr>
+<tr><td>Backups</td><td>Back up <code>JENKINS_HOME</code> volume; keep all jobs in Jenkinsfiles and settings in JCasC</td></tr>
+<tr><td>Pipelines</td><td>Timeouts, build discarders, shared libraries for reuse, pinned tool images</td></tr></table>
+<div class="cmd"><span class="lang">bash</span><pre><code>docker run --rm -v jenkins_home:/v -v $PWD:/b alpine tar czf /b/jenkins-backup.tgz -C /v .
+ls -lh jenkins-backup.tgz
+docker compose down</code></pre></div>
+<div class="card tip"><div class="t">Checkpoint</div>A multibranch job builds on push, runs stages in parallel, pushes an image, and updates a Kubernetes Deployment on <code>main</code> only.</div>
+
+<div class="pager"><a href="07-ansible.html">&larr; 7. Ansible</a><a href="09-terraform.html">9. Terraform &rarr;</a></div></main><script src="assets/course.js"></script></body></html>

@@ -1,0 +1,251 @@
+<!--title:12. Capstone B: End-to-End Platform|Terraform + EKS + Jenkins + Helm + Istio + Ansible, one pipeline from commit to canary|#f472b6-->
+<div class="meta"><span>All tools combined</span><span>billable AWS resources</span><span>~3 hours</span></div>
+<div class="card warn"><div class="t">Cost</div>EKS control plane, two nodes and a load balancer are billable. Complete the lab in one sitting and run the cleanup section at the end. Check current pricing first.</div>
+
+<h2><b>1.</b> The full delivery flow</h2>
+<figure><svg viewBox="0 0 720 300" width="720"><defs><marker id="p" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><g font-size="12" fill="#fff" text-anchor="middle">
+<rect x="10" y="20" width="100" height="46" rx="8" fill="#f59e0b"/><text x="60" y="48" fill="#0a0d1a">1 Git push</text>
+<rect x="140" y="20" width="110" height="46" rx="8" fill="#f87171"/><text x="195" y="48">2 Jenkins CI</text>
+<rect x="280" y="20" width="110" height="46" rx="8" fill="#2dd4bf"/><text x="335" y="48" fill="#0a0d1a">3 Image to ECR</text>
+<rect x="420" y="20" width="120" height="46" rx="8" fill="#a78bfa"/><text x="480" y="48">4 helm upgrade</text>
+<rect x="570" y="20" width="130" height="46" rx="8" fill="#f472b6"/><text x="635" y="48">5 Istio canary 10%</text>
+<rect x="10" y="130" width="690" height="150" rx="12" fill="none" stroke="#6c8cff" stroke-dasharray="6"/><text x="60" y="150" fill="#6c8cff">AWS (built by Terraform)</text>
+<rect x="30" y="165" width="120" height="50" rx="8" fill="#475085"/><text x="90" y="195">VPC + subnets</text>
+<rect x="170" y="165" width="130" height="50" rx="8" fill="#475085"/><text x="235" y="195">EKS cluster</text>
+<rect x="320" y="165" width="110" height="50" rx="8" fill="#475085"/><text x="375" y="195">ECR</text>
+<rect x="450" y="165" width="120" height="50" rx="8" fill="#475085"/><text x="510" y="195">IAM (IRSA)</text>
+<rect x="590" y="165" width="95" height="50" rx="8" fill="#475085"/><text x="637" y="195">ALB / NLB</text>
+<rect x="30" y="225" width="250" height="42" rx="8" fill="#34d399"/><text x="155" y="251" fill="#0a0d1a">Ansible: configure the Jenkins/bastion VM</text>
+<rect x="300" y="225" width="385" height="42" rx="8" fill="#34d399"/><text x="492" y="251" fill="#0a0d1a">Istio + Prometheus + Kiali observe the canary</text></g>
+<g stroke="#9aa3c7" stroke-width="2" marker-end="url(#p)"><line x1="110" y1="43" x2="138" y2="43"/><line x1="250" y1="43" x2="278" y2="43"/><line x1="390" y1="43" x2="418" y2="43"/><line x1="540" y1="43" x2="568" y2="43"/></g></svg></figure>
+<table><tr><th>Layer</th><th>Tool</th><th>Responsibility</th></tr>
+<tr><td>Infrastructure</td><td>Terraform</td><td>VPC, EKS, ECR, IAM</td></tr>
+<tr><td>Server config</td><td>Ansible</td><td>Install Docker, Jenkins, kubectl, helm on the CI VM</td></tr>
+<tr><td>Build</td><td>Jenkins + Docker</td><td>Test, build, scan, push</td></tr>
+<tr><td>Release</td><td>Helm</td><td>Versioned, repeatable deploys and rollbacks</td></tr>
+<tr><td>Traffic</td><td>Istio</td><td>Canary, mTLS, telemetry</td></tr></table>
+
+<h2><b>2.</b> Repository layout</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>mkdir -p ~/lab/platform/{infra,ansible,app} &amp;&amp; cd ~/lab/platform &amp;&amp; git init -q
+tree -L 2 . 2&gt;/dev/null || ls
+<span class="c"># infra/    Terraform (page 9 patterns)</span>
+<span class="c"># ansible/  playbooks for the CI VM (page 7)</span>
+<span class="c"># app/      source, Dockerfile, Helm chart, Jenkinsfile (pages 3, 5, 8, 11)</span>
+cp -r ~/lab/todo/api ~/lab/todo/chart app/ 2&gt;/dev/null; ls app</code></pre></div>
+
+<h2><b>3.</b> Step 1: Terraform builds EKS</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>cd ~/lab/platform/infra
+cat &gt; main.tf &lt;&lt;'EOT'
+terraform {
+  required_version = ">= 1.6"
+  required_providers {
+    aws = { source = "hashicorp/aws", version = "~> 5.0" }
+  }
+}
+provider "aws" { region = var.region }
+
+variable "region" {
+  type    = string
+  default = "ap-south-1"
+}
+variable "cluster_name" {
+  type    = string
+  default = "platform-lab"
+}
+
+data "aws_availability_zones" "az" { state = "available" }
+
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "~> 5.0"
+
+  name               = var.cluster_name
+  cidr               = "10.0.0.0/16"
+  azs                = slice(data.aws_availability_zones.az.names, 0, 2)
+  public_subnets     = ["10.0.1.0/24", "10.0.2.0/24"]
+  private_subnets    = ["10.0.11.0/24", "10.0.12.0/24"]
+  enable_nat_gateway = true
+  single_nat_gateway = true # cheaper for a lab; use one per AZ in production
+  public_subnet_tags  = { "kubernetes.io/role/elb" = 1 }
+  private_subnet_tags = { "kubernetes.io/role/internal-elb" = 1 }
+}
+
+module "eks" {
+  source  = "terraform-aws-modules/eks/aws"
+  version = "~> 20.0"
+
+  cluster_name    = var.cluster_name
+  cluster_version = "1.31" # choose a version currently supported by EKS
+  vpc_id          = module.vpc.vpc_id
+  subnet_ids      = module.vpc.private_subnets
+
+  cluster_endpoint_public_access           = true
+  enable_cluster_creator_admin_permissions = true
+
+  eks_managed_node_groups = {
+    default = {
+      instance_types = ["t3.large"]
+      min_size       = 2
+      max_size       = 3
+      desired_size   = 2
+    }
+  }
+}
+
+resource "aws_ecr_repository" "app" {
+  name                 = "todo-api"
+  image_tag_mutability = "IMMUTABLE"
+  force_delete         = true # lab only
+  image_scanning_configuration { scan_on_push = true }
+}
+
+output "cluster_name" { value = module.eks.cluster_name }
+output "ecr_url"      { value = aws_ecr_repository.app.repository_url }
+EOT
+terraform init
+terraform validate
+terraform plan -out tfplan
+terraform apply tfplan                <span class="c"># about 15-20 minutes</span>
+aws eks update-kubeconfig --name $(terraform output -raw cluster_name) --region ap-south-1
+kubectl get nodes</code></pre></div>
+<div class="card"><div class="t">Why IMMUTABLE tags</div>An immutable tag can never be overwritten, so a tag always identifies one exact image. Combined with a build-number tag, this makes rollbacks trustworthy.</div>
+
+<h2><b>4.</b> Step 2: Ansible prepares the CI server</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>cd ~/lab/platform/ansible
+cat &gt; inventory.ini &lt;&lt;'EOT'
+[ci]
+ci1 ansible_host=REPLACE_WITH_VM_IP ansible_user=devops ansible_ssh_private_key_file=~/.ssh/lab_key
+EOT
+cat &gt; ci.yml &lt;&lt;'EOT'
+- name: Prepare CI server
+  hosts: ci
+  become: true
+  vars: {k8s_minor: "v1.31"}
+  tasks:
+  - name: Base packages
+    ansible.builtin.apt: {name: [docker.io, git, curl, unzip, jq, openjdk-17-jre-headless], state: present, update_cache: true}
+  - name: Docker running
+    ansible.builtin.service: {name: docker, state: started, enabled: true}
+  - name: kubectl and helm
+    ansible.builtin.shell: |
+      curl -fsSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" &amp;&amp; chmod +x /usr/local/bin/kubectl
+      curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    args: {creates: /usr/local/bin/helm}
+  - name: Jenkins container
+    community.docker.docker_container:
+      name: jenkins
+      image: jenkins/jenkins:lts-jdk17
+      restart_policy: unless-stopped
+      published_ports: ["8088:8080"]
+      volumes: [jenkins_home:/var/jenkins_home]
+EOT
+ansible-galaxy collection install community.docker
+ansible-playbook -i inventory.ini ci.yml --syntax-check
+ansible-playbook -i inventory.ini ci.yml --check
+ansible-playbook -i inventory.ini ci.yml</code></pre></div>
+
+<h2><b>5.</b> Step 3: Install Istio on EKS</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>cd ~/lab && curl -L https://istio.io/downloadIstio | sh - &amp;&amp; cd istio-* &amp;&amp; export PATH=$PWD/bin:$PATH
+istioctl install --set profile=default -y
+kubectl create ns shop &amp;&amp; kubectl label ns shop istio-injection=enabled
+kubectl apply -f samples/addons/prometheus.yaml -f samples/addons/kiali.yaml
+kubectl -n istio-system get svc istio-ingressgateway    <span class="c"># EXTERNAL-IP is the AWS load balancer</span></code></pre></div>
+
+<h2><b>6.</b> Step 4: Helm chart with canary support</h2>
+<p>Add a second Deployment (the canary) and let Istio split traffic. In <code>app/chart/templates/istio.yaml</code>:</p>
+<div class="cmd"><span class="lang">bash</span><pre><code>cd ~/lab/platform/app
+cat &gt;&gt; chart/values.yaml &lt;&lt;'EOT'
+canary: {enabled: false, tag: "", weight: 10}
+EOT
+cat &gt; chart/templates/istio.yaml &lt;&lt;'EOT'
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata: {name: {{ .Release.Name }}-api}
+spec:
+  host: {{ .Release.Name }}-api
+  subsets:
+  - {name: stable, labels: {track: stable}}
+  - {name: canary, labels: {track: canary}}
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata: {name: {{ .Release.Name }}-api}
+spec:
+  hosts: [{{ .Release.Name }}-api]
+  http:
+  - route:
+    - {destination: {host: {{ .Release.Name }}-api, subset: stable}, weight: {{ sub 100 (.Values.canary.enabled | ternary (int .Values.canary.weight) 0) }}}
+{{- if .Values.canary.enabled }}
+    - {destination: {host: {{ .Release.Name }}-api, subset: canary}, weight: {{ .Values.canary.weight }}}
+{{- end }}
+EOT
+<span class="c"># Edit chart/templates/api.yaml: add label "track: stable" to pod template labels.</span>
+<span class="c"># Add a copy of the api Deployment named {{ .Release.Name }}-api-canary with track: canary,</span>
+<span class="c"># image tag .Values.canary.tag, wrapped in {{- if .Values.canary.enabled }} ... {{- end }}.</span>
+<span class="c"># The Service selects only app=..., so both tracks receive traffic and Istio weights decide the split.</span>
+helm lint chart --set db.password=x</code></pre></div>
+<div class="card"><div class="t">Where the traffic is decided</div>Kubernetes Services spread evenly by pod count; Istio's VirtualService overrides that with exact percentages, so one canary pod can receive 10% regardless of how many stable pods exist.</div>
+
+<h2><b>7.</b> Step 5: The Jenkinsfile</h2>
+<!--dg:canseq--><figure><svg viewBox="0 0 760 336" width="760" role="img" aria-label="Canary pipeline sequence"><defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><line x1="63.333333333333336" y1="48" x2="63.333333333333336" y2="330" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="9.333333333333336" y="8" width="108" height="40" rx="8" fill="#6c8cff"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="63.333333333333336" y="32.2">Developer</tspan></text><line x1="190.0" y1="48" x2="190.0" y2="330" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="136.0" y="8" width="108" height="40" rx="8" fill="#a78bfa"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="190.0" y="32.2">Git</tspan></text><line x1="316.6666666666667" y1="48" x2="316.6666666666667" y2="330" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="262.6666666666667" y="8" width="108" height="40" rx="8" fill="#f472b6"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="316.6666666666667" y="32.2">Jenkins</tspan></text><line x1="443.33333333333337" y1="48" x2="443.33333333333337" y2="330" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="389.33333333333337" y="8" width="108" height="40" rx="8" fill="#f59e0b"/><text font-size="12" fill="#0a0d1a" text-anchor="middle"><tspan x="443.33333333333337" y="32.2">ECR</tspan></text><line x1="570.0" y1="48" x2="570.0" y2="330" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="516.0" y="8" width="108" height="40" rx="8" fill="#2dd4bf"/><text font-size="12" fill="#0a0d1a" text-anchor="middle"><tspan x="570.0" y="25.0">EKS</tspan><tspan x="570.0" y="39.4">Helm + Istio</tspan></text><line x1="696.6666666666667" y1="48" x2="696.6666666666667" y2="330" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="642.6666666666667" y="8" width="108" height="40" rx="8" fill="#34d399"/><text font-size="12" fill="#0a0d1a" text-anchor="middle"><tspan x="696.6666666666667" y="32.2">Prometheus</tspan></text><line x1="67.33333333333334" y1="86" x2="186.0" y2="86" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="126.66666666666667" y="80.0" font-size="11" text-anchor="middle" class="lb" >1 push</text><line x1="194.0" y1="124" x2="312.6666666666667" y2="124" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="253.33333333333334" y="118.0" font-size="11" text-anchor="middle" class="lb" >2 webhook</text><line x1="320.6666666666667" y1="162" x2="439.33333333333337" y2="162" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="380.0" y="156.0" font-size="11" text-anchor="middle" class="lb" >3 push image:TAG</text><line x1="320.6666666666667" y1="200" x2="566.0" y2="200" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="443.33333333333337" y="194.0" font-size="11" text-anchor="middle" class="lb" >4 helm upgrade, canary 10%</text><line x1="574.0" y1="238" x2="692.6666666666667" y2="238" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="633.3333333333334" y="232.0" font-size="11" text-anchor="middle" class="lb" >5 Envoy metrics</text><line x1="320.6666666666667" y1="276" x2="692.6666666666667" y2="276" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="506.66666666666674" y="270.0" font-size="11" text-anchor="middle" class="lb" >6 query canary 5xx rate</text><line x1="320.6666666666667" y1="314" x2="566.0" y2="314" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="443.33333333333337" y="308.0" font-size="11" text-anchor="middle" class="lb" >7 promote to 100% or rollback</text></svg><figcaption>The pipeline decides from measured error rates, not from hope. Step 7 is gated by the 5xx check and a human approval.</figcaption></figure>
+<div class="cmd"><span class="lang">groovy</span><pre><code>pipeline {
+  agent any
+  environment {
+    AWS_REGION = 'ap-south-1'
+    ECR        = credentials('ecr-registry-url')   // text credential: ACCOUNT.dkr.ecr.REGION.amazonaws.com
+    TAG        = "${env.GIT_COMMIT.take(8)}-${env.BUILD_NUMBER}"
+  }
+  stages {
+    stage('Test')  { steps { sh 'cd app/api &amp;&amp; python3 -m py_compile app.py' } }
+    stage('Build') { steps { sh 'docker build -t $ECR/todo-api:$TAG app/api' } }
+    stage('Scan')  { steps { sh 'trivy image --exit-code 1 --severity CRITICAL $ECR/todo-api:$TAG || true' } }
+    stage('Push')  {
+      steps {
+        sh 'aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR'
+        sh 'docker push $ECR/todo-api:$TAG'
+      }
+    }
+    stage('Canary 10%') {
+      steps {
+        sh '''aws eks update-kubeconfig --name platform-lab --region $AWS_REGION
+              helm upgrade --install shop app/chart -n shop --reuse-values \
+                --set api.image.repository=$ECR/todo-api --set canary.enabled=true \
+                --set canary.tag=$TAG --set canary.weight=10 --wait --timeout 5m'''
+      }
+    }
+    stage('Verify canary') {
+      steps {
+        sh '''sleep 60
+              ERR=$(kubectl -n istio-system exec deploy/prometheus -- wget -qO- \
+                "http://localhost:9090/api/v1/query?query=sum(rate(istio_requests_total{destination_workload=~\\".*canary\\",response_code=~\\"5..\\"}[1m]))" | jq -r '.data.result[0].value[1] // "0"')
+              echo "canary 5xx rate: $ERR"; [ "$(echo "$ERR &lt; 0.05" | bc)" = 1 ]'''
+      }
+    }
+    stage('Promote') {
+      steps {
+        input message: 'Promote canary to 100%?'
+        sh 'helm upgrade shop app/chart -n shop --reuse-values --set api.image.tag=$TAG --set canary.enabled=false --wait'
+      }
+    }
+  }
+  post { failure { sh 'helm rollback shop -n shop || true' } }
+}</code></pre></div>
+<div class="card"><div class="t">Gate on evidence</div>The pipeline promotes only if the canary's 5xx rate stays under the threshold and a human approves. Any failure triggers <code>helm rollback</code>.</div>
+
+<h2><b>8.</b> Verify the whole system</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>kubectl -n shop get pods,vs,dr
+helm -n shop history shop
+LB=$(kubectl -n istio-system get svc istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+curl -s http://$LB/api/todos
+istioctl dashboard kiali --address 0.0.0.0 &amp;
+terraform -chdir=../infra state list | head</code></pre></div>
+
+<h2><b>9.</b> Clean up (mandatory)</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>helm uninstall shop -n shop; kubectl delete ns shop
+istioctl uninstall --purge -y; kubectl delete ns istio-system    <span class="c"># removes the AWS load balancer first</span>
+sleep 60
+cd ~/lab/platform/infra &amp;&amp; terraform destroy
+aws elbv2 describe-load-balancers --query 'LoadBalancers[].LoadBalancerName'   <span class="c"># should be empty</span>
+aws ec2 describe-nat-gateways --filter Name=state,Values=available --query 'NatGateways[].NatGatewayId'</code></pre></div>
+<div class="card warn"><div class="t">Order matters</div>Delete Kubernetes load balancers before <code>terraform destroy</code>. Otherwise AWS keeps ENIs in the VPC and the destroy hangs on subnet deletion.</div>
+<div class="card tip"><div class="t">Checkpoint</div>You have provisioned a cluster from code, configured a server with Ansible, shipped an image through a pipeline, shifted 10% of traffic with Istio, and torn everything down cleanly.</div>

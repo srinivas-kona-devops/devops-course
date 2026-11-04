@@ -1,0 +1,295 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>11. Capstone A: Full App on Kubernetes | DevOps Course</title><link rel="stylesheet" href="assets/course.css"></head><body>
+<nav class="side"><h2>DevOps Course</h2><a href="index.html">Home</a><a href="01-linux.html">1. Linux Admin</a><a href="02-git.html">2. Git</a><a href="03-docker.html">3. Docker</a><a href="04-kubernetes.html">4. Kubernetes</a><a href="05-helm.html">5. Helm</a><a href="06-istio.html">6. Istio</a><a href="07-ansible.html">7. Ansible</a><a href="08-jenkins.html">8. Jenkins</a><a href="09-terraform.html">9. Terraform</a><a href="10-aws.html">10. AWS Services</a><a href="11-capstone-k8s.html" class=on>11. Capstone A: Full App on Kubernetes</a><a href="12-capstone-platform.html">12. Capstone B: End-to-End Platform</a></nav><main><header class="hero"><h1>11. Capstone A: Full App on Kubernetes</h1><p>Build, containerize, Helm-deploy, expose, scale and monitor a 3-tier app</p></header>
+<div class="meta"><span>Git + Docker + Kubernetes + Helm</span><span>~2 hours</span></div>
+<div class="card lab"><div class="t">What you build</div>A to-do API (Python Flask) with PostgreSQL and a static web page, packaged as a Helm chart, deployed to the cluster from page 4 with Ingress, probes, autoscaling and a network policy.</div>
+
+<h2><b>1.</b> Target architecture</h2>
+<figure><svg viewBox="0 0 700 220" width="700"><defs><marker id="c" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><g font-size="13" fill="#fff" text-anchor="middle">
+<rect x="10" y="80" width="90" height="50" rx="8" fill="#475085"/><text x="55" y="110">Browser</text>
+<rect x="140" y="80" width="110" height="50" rx="8" fill="#f59e0b"/><text x="195" y="110" fill="#0a0d1a">Ingress</text>
+<rect x="290" y="30" width="130" height="50" rx="8" fill="#6c8cff"/><text x="355" y="60">web (nginx)</text>
+<rect x="290" y="130" width="130" height="50" rx="8" fill="#a78bfa"/><text x="355" y="160">api (Flask x3)</text>
+<rect x="470" y="130" width="130" height="50" rx="8" fill="#f472b6"/><text x="535" y="160">PostgreSQL</text>
+<rect x="630" y="130" width="60" height="50" rx="8" fill="#2dd4bf"/><text x="660" y="160" fill="#0a0d1a">PVC</text></g>
+<g stroke="#9aa3c7" stroke-width="2" marker-end="url(#c)"><line x1="100" y1="105" x2="138" y2="105"/><line x1="250" y1="95" x2="288" y2="60"/><line x1="250" y1="115" x2="288" y2="150"/><line x1="420" y1="155" x2="468" y2="155"/><line x1="600" y1="155" x2="628" y2="155"/></g></svg>
+<figcaption>Ingress sends <code>/</code> to the web page and <code>/api</code> to the API. Only the API may reach the database.</figcaption></figure>
+
+<h2><b>2.</b> Source code and Git</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>mkdir -p ~/lab/todo/api &amp;&amp; cd ~/lab/todo &amp;&amp; git init -q
+cat &gt; api/app.py &lt;&lt;'EOT'
+import os, psycopg2
+from flask import Flask, jsonify, request
+app = Flask(__name__)
+def db():
+    return psycopg2.connect(host=os.environ["DB_HOST"], user="postgres",
+                            password=os.environ["DB_PASSWORD"], dbname="postgres", connect_timeout=3)
+def init():
+    with db() as c, c.cursor() as cur:
+        cur.execute("create table if not exists todos(id serial primary key, title text not null)")
+@app.get("/healthz")
+def healthz(): return "ok"
+@app.get("/readyz")
+def readyz():
+    try:
+        with db() as c, c.cursor() as cur: cur.execute("select 1")
+        return "ready"
+    except Exception as e:
+        return str(e), 503
+@app.get("/api/todos")
+def list_todos():
+    with db() as c, c.cursor() as cur:
+        cur.execute("select id, title from todos order by id")
+        return jsonify([{"id": i, "title": t} for i, t in cur.fetchall()])
+@app.post("/api/todos")
+def add_todo():
+    with db() as c, c.cursor() as cur:
+        cur.execute("insert into todos(title) values (%s) returning id", (request.json["title"],))
+        return jsonify({"id": cur.fetchone()[0]}), 201
+if __name__ == "__main__":
+    init()
+    app.run(host="0.0.0.0", port=8000)
+EOT
+printf 'flask==3.0.3\npsycopg2-binary==2.9.9\ngunicorn==23.0.0\n' &gt; api/requirements.txt
+cat &gt; api/Dockerfile &lt;&lt;'EOT'
+FROM python:3.12-slim
+ENV PYTHONUNBUFFERED=1
+RUN useradd -m -u 10001 app
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py .
+USER 10001
+EXPOSE 8000
+CMD ["python", "app.py"]
+EOT
+printf '__pycache__/\n*.pyc\n.env\n' &gt; .gitignore
+git add -A &amp;&amp; git commit -qm "feat: todo api" &amp;&amp; git log --oneline</code></pre></div>
+
+<h2><b>3.</b> Build and test with Compose first</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>cd ~/lab/todo
+cat &gt; compose.yaml &lt;&lt;'EOT'
+services:
+  db:
+    image: postgres:16-alpine
+    environment: {POSTGRES_PASSWORD: devpass}
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U postgres"], interval: 3s, retries: 10}
+  api:
+    build: ./api
+    environment: {DB_HOST: db, DB_PASSWORD: devpass}
+    ports: ["8000:8000"]
+    depends_on: {db: {condition: service_healthy}}
+EOT
+docker compose up -d --build
+sleep 5
+curl -s -XPOST localhost:8000/api/todos -H 'content-type: application/json' -d '{"title":"learn devops"}'
+curl -s localhost:8000/api/todos; echo
+docker compose down -v</code></pre></div>
+
+<h2><b>4.</b> Publish the image</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code><span class="c"># single-node lab: import straight into containerd, no registry needed</span>
+docker build -t todo-api:1.0.0 api/
+docker save todo-api:1.0.0 | ctr -n k8s.io images import -
+<span class="c"># multi-node or EKS: push to a registry instead (ECR from page 10)</span>
+<span class="c"># docker tag todo-api:1.0.0 $ACCT.dkr.ecr.$AWS_REGION.amazonaws.com/todo-api:1.0.0 &amp;&amp; docker push ...</span></code></pre></div>
+
+<h2><b>5.</b> Helm chart for the whole app</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>cd ~/lab/todo &amp;&amp; helm create chart &amp;&amp; rm -rf chart/templates/* chart/charts
+cat &gt; chart/Chart.yaml &lt;&lt;'EOT'
+apiVersion: v2
+name: todo
+description: Three-tier to-do application
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+EOT
+cat &gt; chart/values.yaml &lt;&lt;'EOT'
+api:
+  image: {repository: todo-api, tag: "1.0.0", pullPolicy: IfNotPresent}
+  replicas: 3
+  resources: {requests: {cpu: 50m, memory: 96Mi}, limits: {cpu: 300m, memory: 192Mi}}
+db:
+  image: postgres:16-alpine
+  storage: 1Gi
+  password: ""        # set with --set db.password=... or an existing secret
+  existingSecret: ""
+web:
+  image: nginxinc/nginx-unprivileged:1.27-alpine
+ingress: {enabled: true, className: nginx, host: todo.lab.local}
+autoscaling: {enabled: true, min: 2, max: 6, cpu: 60}
+EOT
+cat &gt; chart/templates/_helpers.tpl &lt;&lt;'EOT'
+{{- define "todo.secretName" -}}
+{{- default (printf "%s-db" .Release.Name) .Values.db.existingSecret -}}
+{{- end -}}
+EOT
+cat &gt; chart/templates/db.yaml &lt;&lt;'EOT'
+{{- if not .Values.db.existingSecret }}
+apiVersion: v1
+kind: Secret
+metadata: {name: {{ .Release.Name }}-db}
+stringData: {password: {{ required "set db.password" .Values.db.password | quote }}}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata: {name: {{ .Release.Name }}-db}
+spec: {clusterIP: None, selector: {app: {{ .Release.Name }}-db}, ports: [{port: 5432}]}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: {{ .Release.Name }}-db}
+spec:
+  serviceName: {{ .Release.Name }}-db
+  replicas: 1
+  selector: {matchLabels: {app: {{ .Release.Name }}-db}}
+  template:
+    metadata: {labels: {app: {{ .Release.Name }}-db}}
+    spec:
+      containers:
+      - name: pg
+        image: {{ .Values.db.image }}
+        env:
+        - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: {{ include "todo.secretName" . }}, key: password}}}
+        - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+        readinessProbe: {exec: {command: ["pg_isready","-U","postgres"]}, periodSeconds: 5}
+        volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+  volumeClaimTemplates:
+  - metadata: {name: data}
+    spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: {{ .Values.db.storage }}}}}
+EOT
+cat &gt; chart/templates/api.yaml &lt;&lt;'EOT'
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: {{ .Release.Name }}-api}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector: {matchLabels: {app: {{ .Release.Name }}-api}}
+  template:
+    metadata: {labels: {app: {{ .Release.Name }}-api}}
+    spec:
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+      - name: api
+        image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+        imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+        ports: [{containerPort: 8000}]
+        env:
+        - {name: DB_HOST, value: {{ .Release.Name }}-db}
+        - {name: DB_PASSWORD, valueFrom: {secretKeyRef: {name: {{ include "todo.secretName" . }}, key: password}}}
+        readinessProbe: {httpGet: {path: /readyz, port: 8000}, periodSeconds: 5}
+        livenessProbe: {httpGet: {path: /healthz, port: 8000}, initialDelaySeconds: 10}
+        resources: {{- toYaml .Values.api.resources | nindent 10 }}
+        securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: {{ .Release.Name }}-api}
+spec: {selector: {app: {{ .Release.Name }}-api}, ports: [{port: 80, targetPort: 8000}]}
+{{- if .Values.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: {{ .Release.Name }}-api}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: {{ .Release.Name }}-api}
+  minReplicas: {{ .Values.autoscaling.min }}
+  maxReplicas: {{ .Values.autoscaling.max }}
+  metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: {{ .Values.autoscaling.cpu }}}}}]
+{{- end }}
+EOT
+cat &gt; chart/templates/web.yaml &lt;&lt;'EOT'
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: {{ .Release.Name }}-web}
+data:
+  index.html: |
+    &lt;!doctype html&gt;&lt;title&gt;Todo&lt;/title&gt;&lt;h1&gt;Todo&lt;/h1&gt;&lt;ul id=l&gt;&lt;/ul&gt;
+    &lt;input id=t&gt;&lt;button onclick="add()"&gt;Add&lt;/button&gt;
+    &lt;script&gt;
+    async function load(){const r=await (await fetch('/api/todos')).json();l.innerHTML=r.map(x=&gt;'&lt;li&gt;'+x.title+'&lt;/li&gt;').join('')}
+    async function add(){await fetch('/api/todos',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({title:t.value})});t.value='';load()}
+    load()
+    &lt;/script&gt;
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: {{ .Release.Name }}-web}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: {{ .Release.Name }}-web}}
+  template:
+    metadata: {labels: {app: {{ .Release.Name }}-web}}
+    spec:
+      containers:
+      - name: web
+        image: {{ .Values.web.image }}
+        ports: [{containerPort: 8080}]
+        volumeMounts: [{name: html, mountPath: /usr/share/nginx/html}]
+      volumes: [{name: html, configMap: {name: {{ .Release.Name }}-web}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: {{ .Release.Name }}-web}
+spec: {selector: {app: {{ .Release.Name }}-web}, ports: [{port: 80, targetPort: 8080}]}
+EOT
+cat &gt; chart/templates/ingress.yaml &lt;&lt;'EOT'
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: {name: {{ .Release.Name }}}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+  - host: {{ .Values.ingress.host }}
+    http:
+      paths:
+      - {path: /api, pathType: Prefix, backend: {service: {name: {{ .Release.Name }}-api, port: {number: 80}}}}
+      - {path: /, pathType: Prefix, backend: {service: {name: {{ .Release.Name }}-web, port: {number: 80}}}}
+{{- end }}
+EOT
+cat &gt; chart/templates/netpol.yaml &lt;&lt;'EOT'
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: {{ .Release.Name }}-db-only-from-api}
+spec:
+  podSelector: {matchLabels: {app: {{ .Release.Name }}-db}}
+  policyTypes: [Ingress]
+  ingress: [{from: [{podSelector: {matchLabels: {app: {{ .Release.Name }}-api}}}], ports: [{port: 5432}]}]
+EOT
+helm lint chart --set db.password=x
+helm template todo chart --set db.password=x | kubectl apply --dry-run=client -f - | head -20</code></pre></div>
+
+<h2><b>6.</b> Deploy, verify, scale, update</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>kubectl create ns todo
+helm install todo chart -n todo --set db.password="$(openssl rand -hex 12)" --wait --timeout 5m
+kubectl -n todo get all,ingress,pvc
+curl -s -XPOST -H 'Host: todo.lab.local' -H 'content-type: application/json' -d '{"title":"ship it"}' http://127.0.0.1:30080/api/todos
+curl -s -H 'Host: todo.lab.local' http://127.0.0.1:30080/api/todos; echo
+curl -s -H 'Host: todo.lab.local' http://127.0.0.1:30080/ | head -3
+
+<span class="c"># self-healing and persistence</span>
+kubectl -n todo delete pod -l app=todo-api --wait=false
+kubectl -n todo delete pod todo-db-0 &amp;&amp; kubectl -n todo wait --for=condition=ready pod/todo-db-0 --timeout=120s
+curl -s -H 'Host: todo.lab.local' http://127.0.0.1:30080/api/todos; echo   <span class="c"># data still present</span>
+
+<span class="c"># load and autoscale</span>
+kubectl -n todo run load --rm -it --image=busybox:1.36 --restart=Never -- sh -c 'for i in $(seq 1 2000); do wget -qO- http://todo-api/api/todos &gt;/dev/null; done'
+kubectl -n todo get hpa
+
+<span class="c"># release v1.0.1 with zero downtime</span>
+docker build -t todo-api:1.0.1 api/ &amp;&amp; docker save todo-api:1.0.1 | ctr -n k8s.io images import -
+helm upgrade todo chart -n todo --reuse-values --set api.image.tag=1.0.1 --wait
+helm history todo -n todo
+helm rollback todo 1 -n todo --wait</code></pre></div>
+
+<h2><b>7.</b> Troubleshooting for this app</h2>
+<table><tr><th>Symptom</th><th>Likely cause</th><th>Command</th></tr>
+<tr><td>api pods not Ready</td><td>DB not up or wrong password</td><td><code>kubectl -n todo logs deploy/todo-api</code></td></tr>
+<tr><td><code>ErrImagePull</code> on api</td><td>Image missing on the node</td><td>Re-run the <code>ctr images import</code> step</td></tr>
+<tr><td>404 on ingress</td><td>Wrong Host header or ingress class</td><td><code>kubectl -n todo describe ingress todo</code></td></tr>
+<tr><td>HPA shows <code>&lt;unknown&gt;</code></td><td>metrics-server missing</td><td>Install it (page 4, step 8)</td></tr></table>
+<div class="cmd"><span class="lang">bash</span><pre><code>helm uninstall todo -n todo; kubectl delete pvc --all -n todo; kubectl delete ns todo</code></pre></div>
+<div class="card tip"><div class="t">Checkpoint</div>The app survives pod deletion with its data, scales under load, and upgrades and rolls back without downtime.</div>
+
+<div class="pager"><a href="10-aws.html">&larr; 10. AWS Services</a><a href="12-capstone-platform.html">12. Capstone B: End-to-End Platform &rarr;</a></div></main><script src="assets/course.js"></script></body></html>

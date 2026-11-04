@@ -1,0 +1,106 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3. Docker | DevOps Course</title><link rel="stylesheet" href="assets/course.css"></head><body>
+<nav class="side"><h2>DevOps Course</h2><a href="index.html">Home</a><a href="01-linux.html">1. Linux Admin</a><a href="02-git.html">2. Git</a><a href="03-docker.html" class=on>3. Docker</a><a href="04-kubernetes.html">4. Kubernetes</a><a href="05-helm.html">5. Helm</a><a href="06-istio.html">6. Istio</a><a href="07-ansible.html">7. Ansible</a><a href="08-jenkins.html">8. Jenkins</a><a href="09-terraform.html">9. Terraform</a><a href="10-aws.html">10. AWS Services</a><a href="11-capstone-k8s.html">11. Capstone A: Full App on Kubernetes</a><a href="12-capstone-platform.html">12. Capstone B: End-to-End Platform</a></nav><main><header class="hero"><h1>3. Docker</h1><p>Images, containers, networking, volumes, Compose</p></header>
+<div class="meta"><span>~60 min</span><span>root or docker group</span></div>
+
+<h2><b>1.</b> Containers vs virtual machines</h2>
+<figure><svg viewBox="0 0 660 230" width="660"><g font-size="14" text-anchor="middle" fill="#fff">
+<text x="165" y="20" fill="#9aa3c7">Virtual machines</text><text x="500" y="20" fill="#9aa3c7">Containers</text>
+<rect x="30" y="30" width="80" height="70" rx="6" fill="#f472b6"/><text x="70" y="70">App + OS</text><rect x="120" y="30" width="80" height="70" rx="6" fill="#f472b6"/><text x="160" y="70">App + OS</text><rect x="210" y="30" width="80" height="70" rx="6" fill="#f472b6"/><text x="250" y="70">App + OS</text>
+<rect x="30" y="108" width="260" height="34" rx="6" fill="#a78bfa"/><text x="160" y="130">Hypervisor</text>
+<rect x="400" y="30" width="60" height="70" rx="6" fill="#2dd4bf"/><text x="430" y="70" fill="#0a0d1a">App</text><rect x="470" y="30" width="60" height="70" rx="6" fill="#2dd4bf"/><text x="500" y="70" fill="#0a0d1a">App</text><rect x="540" y="30" width="60" height="70" rx="6" fill="#2dd4bf"/><text x="570" y="70" fill="#0a0d1a">App</text>
+<rect x="400" y="108" width="200" height="34" rx="6" fill="#6c8cff"/><text x="500" y="130">Container engine</text>
+<rect x="30" y="150" width="570" height="34" rx="6" fill="#f59e0b"/><text x="315" y="172" fill="#0a0d1a">Host OS and kernel (containers share it)</text>
+<rect x="30" y="192" width="570" height="30" rx="6" fill="#475085"/><text x="315" y="212">Hardware</text></g></svg></figure>
+
+<h2><b>2.</b> Install Docker Engine (official repository)</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release &amp;&amp; echo $VERSION_CODENAME) stable" &gt; /etc/apt/sources.list.d/docker.list
+apt update &amp;&amp; apt -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable --now docker
+usermod -aG docker devops
+docker version; docker run --rm hello-world</code></pre></div>
+
+<h2><b>3.</b> Everyday commands</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>docker run -d --name web -p 8080:80 nginx:alpine
+curl -s localhost:8080 | head -4
+docker ps; docker logs web --tail 5
+docker exec web nginx -v
+docker stats --no-stream
+docker inspect web | jq '.[0].NetworkSettings.IPAddress'
+docker stop web &amp;&amp; docker rm web</code></pre></div>
+
+<h2><b>4.</b> Build an image</h2>
+<!--dg:layers--><figure><svg viewBox="0 0 640 235" width="640" role="img" aria-label="Image layers"><defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><rect x="20" y="12" width="380" height="38" rx="8" fill="#f472b6"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="210.0" y="35.2">Container writable layer (copy-on-write, deleted with container)</tspan></text><rect x="20" y="56" width="380" height="38" rx="8" fill="#6c8cff"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="210.0" y="79.2">COPY app.py   (layer 4, read-only)</tspan></text><rect x="20" y="100" width="380" height="38" rx="8" fill="#a78bfa"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="210.0" y="123.2">RUN pip install   (layer 3, cached if unchanged)</tspan></text><rect x="20" y="144" width="380" height="38" rx="8" fill="#475085"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="210.0" y="167.2">RUN useradd   (layer 2)</tspan></text><rect x="20" y="188" width="380" height="38" rx="8" fill="#2dd4bf"/><text font-size="12" fill="#0a0d1a" text-anchor="middle"><tspan x="210.0" y="211.2">FROM python:3.12-slim   (base layers, shared)</tspan></text><text x="420" y="80" font-size="13" text-anchor="start" class="tx" >Image = stack of read-only layers</text><text x="420" y="102" font-size="12" text-anchor="start" class="lb" >Change layer 3 and layers 3 and above rebuild;</text><text x="420" y="120" font-size="12" text-anchor="start" class="lb" >layers below come from the build cache.</text><text x="420" y="150" font-size="12" text-anchor="start" class="lb" >Ten containers from one image share</text><text x="420" y="168" font-size="12" text-anchor="start" class="lb" >the same read-only layers on disk.</text></svg><figcaption>Order Dockerfile instructions from least to most frequently changed to maximise cache hits.</figcaption></figure>
+<figure><svg viewBox="0 0 660 120" width="660"><defs><marker id="d" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><g font-size="13" text-anchor="middle" fill="#fff">
+<rect x="10" y="20" width="110" height="60" rx="8" fill="#6c8cff"/><text x="65" y="55">Dockerfile</text>
+<rect x="170" y="20" width="110" height="60" rx="8" fill="#a78bfa"/><text x="225" y="55">docker build</text>
+<rect x="330" y="20" width="110" height="60" rx="8" fill="#f472b6"/><text x="385" y="55">Image</text>
+<rect x="490" y="20" width="150" height="60" rx="8" fill="#2dd4bf"/><text x="565" y="55" fill="#0a0d1a">Container / Registry</text></g>
+<g stroke="#9aa3c7" stroke-width="2" marker-end="url(#d)"><line x1="120" y1="50" x2="166" y2="50"/><line x1="280" y1="50" x2="326" y2="50"/><line x1="440" y1="50" x2="486" y2="50"/></g></svg></figure>
+<div class="cmd"><span class="lang">bash</span><pre><code>mkdir -p ~/lab/app &amp;&amp; cd ~/lab/app
+cat &gt; app.py &lt;&lt;'EOT'
+from http.server import BaseHTTPRequestHandler, HTTPServer
+class H(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200); self.end_headers(); self.wfile.write(b"hello devops\n")
+HTTPServer(("", 8000), H).serve_forever()
+EOT
+cat &gt; Dockerfile &lt;&lt;'EOT'
+FROM python:3.12-slim
+RUN useradd -m app
+WORKDIR /app
+COPY app.py .
+USER app
+EXPOSE 8000
+CMD ["python", "app.py"]
+EOT
+docker build -t hello:1.0 .
+docker run -d --name hello -p 8000:8000 hello:1.0
+curl localhost:8000; docker history hello:1.0; docker rm -f hello</code></pre></div>
+<div class="card tip"><div class="t">Best practices</div>Pin base image versions, run as non-root, add a <code>.dockerignore</code>, order layers from least to most frequently changed, and use multi-stage builds to keep images small.</div>
+
+<h2><b>5.</b> Multi-stage build</h2>
+<div class="cmd"><span class="lang">dockerfile</span><pre><code>FROM golang:1.23 AS build
+WORKDIR /src
+COPY . .
+RUN CGO_ENABLED=0 go build -o /out/app .
+FROM gcr.io/distroless/static
+COPY --from=build /out/app /app
+ENTRYPOINT ["/app"]</code></pre></div>
+
+<h2><b>6.</b> Volumes and networks</h2>
+<!--dg:dnet--><figure><svg viewBox="0 0 680 265" width="680" role="img" aria-label="Docker bridge networking"><defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><rect x="10" y="8" width="660" height="250" rx="12" fill="none" stroke="#6c8cff" stroke-width="2" stroke-dasharray="6"/><text x="22" y="26" font-size="13" fill="#6c8cff">Docker host</text><rect x="40" y="60" width="120" height="50" rx="8" fill="#f472b6"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="100.0" y="81.8">web</tspan><tspan x="100.0" y="97.3">172.17.0.2</tspan></text><rect x="40" y="150" width="120" height="50" rx="8" fill="#f472b6"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="100.0" y="171.8">db</tspan><tspan x="100.0" y="187.3">172.17.0.3</tspan></text><rect x="230" y="100" width="150" height="60" rx="8" fill="#a78bfa"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="305.0" y="126.8">docker0 bridge</tspan><tspan x="305.0" y="142.3">172.17.0.1</tspan></text><rect x="430" y="100" width="120" height="60" rx="8" fill="#f59e0b"/><text font-size="13" fill="#0a0d1a" text-anchor="middle"><tspan x="490.0" y="126.8">iptables NAT</tspan><tspan x="490.0" y="142.3">8080 to 80</tspan></text><rect x="585" y="100" width="75" height="60" rx="8" fill="#2dd4bf"/><text font-size="13" fill="#0a0d1a" text-anchor="middle"><tspan x="622.5" y="126.8">eth0</tspan><tspan x="622.5" y="142.3">host IP</tspan></text><line x1="160" y1="85" x2="230" y2="120" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="195.0" y="96.5" font-size="11" text-anchor="middle" class="lb" >veth</text><line x1="160" y1="175" x2="230" y2="140" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="195.0" y="151.5" font-size="11" text-anchor="middle" class="lb" >veth</text><line x1="380" y1="130" x2="430" y2="130" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><line x1="550" y1="130" x2="585" y2="130" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar)"/><text x="340" y="235" font-size="12" text-anchor="middle" class="lb" >Inbound: client to host:8080 is rewritten to container:80. Outbound: masquerade to host IP.</text></svg><figcaption>Default bridge network. Containers on a user-defined network also get DNS names (used in the lab below).</figcaption></figure>
+<div class="cmd"><span class="lang">bash</span><pre><code>docker volume create data
+docker run --rm -v data:/d alpine sh -c 'echo persisted &gt; /d/f'
+docker run --rm -v data:/d alpine cat /d/f
+docker network create appnet
+docker run -d --name db --network appnet -e POSTGRES_PASSWORD=pw postgres:16-alpine
+docker run --rm --network appnet alpine nslookup db
+docker rm -f db; docker network rm appnet; docker volume rm data</code></pre></div>
+
+<h2><b>7.</b> Docker Compose</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>cd ~/lab/app
+cat &gt; compose.yaml &lt;&lt;'EOT'
+services:
+  web:
+    build: .
+    ports: ["8000:8000"]
+    depends_on: [cache]
+  cache:
+    image: redis:7-alpine
+EOT
+docker compose up -d --build
+docker compose ps; curl localhost:8000
+docker compose logs --tail 3; docker compose down</code></pre></div>
+
+<h2><b>8.</b> Local registry, cleanup, hardening</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code>docker run -d -p 5000:5000 --name registry registry:2
+docker tag hello:1.0 localhost:5000/hello:1.0 &amp;&amp; docker push localhost:5000/hello:1.0
+curl -s localhost:5000/v2/_catalog; docker rm -f registry
+docker system df; docker system prune -f
+docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges alpine id</code></pre></div>
+<div class="card warn"><div class="t">Security</div>Membership of the <code>docker</code> group is equivalent to root. Never mount <code>/var/run/docker.sock</code> into untrusted containers.</div>
+
+<div class="pager"><a href="02-git.html">&larr; 2. Git</a><a href="04-kubernetes.html">4. Kubernetes &rarr;</a></div></main><script src="assets/course.js"></script></body></html>
