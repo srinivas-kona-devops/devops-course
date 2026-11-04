@@ -1,6 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>11. Capstone A: Full App on Kubernetes | DevOps Course</title><link rel="stylesheet" href="assets/course.css"></head><body>
-<nav class="side"><h2>DevOps Course</h2><a href="index.html">Home</a><a href="01-linux.html">1. Linux Admin</a><a href="02-git.html">2. Git</a><a href="03-docker.html">3. Docker</a><a href="04-kubernetes.html">4. Kubernetes</a><a href="05-helm.html">5. Helm</a><a href="06-istio.html">6. Istio</a><a href="07-ansible.html">7. Ansible</a><a href="08-jenkins.html">8. Jenkins</a><a href="09-terraform.html">9. Terraform</a><a href="10-aws.html">10. AWS Services</a><a href="11-capstone-k8s.html" class=on>11. Capstone A: Full App on Kubernetes</a><a href="12-capstone-platform.html">12. Capstone B: End-to-End Platform</a></nav><main><header class="hero"><h1>11. Capstone A: Full App on Kubernetes</h1><p>Build, containerize, Helm-deploy, expose, scale and monitor a 3-tier app</p></header>
+<!--title:12. Capstone A: Full App on Kubernetes|Build, containerize, Helm-deploy, expose, scale and monitor a 3-tier app|#34d399|rocket-->
 <div class="meta"><span>Git + Docker + Kubernetes + Helm</span><span>~2 hours</span></div>
 <div class="card lab"><div class="t">What you build</div>A to-do API (Python Flask) with PostgreSQL and a static web page, packaged as a Helm chart, deployed to the cluster from page 4 with Ingress, probes, autoscaling and a network policy.</div>
 
@@ -291,5 +289,3 @@ helm rollback todo 1 -n todo --wait</code></pre></div>
 <tr><td>HPA shows <code>&lt;unknown&gt;</code></td><td>metrics-server missing</td><td>Install it (page 4, step 8)</td></tr></table>
 <div class="cmd"><span class="lang">bash</span><pre><code>helm uninstall todo -n todo; kubectl delete pvc --all -n todo; kubectl delete ns todo</code></pre></div>
 <div class="card tip"><div class="t">Checkpoint</div>The app survives pod deletion with its data, scales under load, and upgrades and rolls back without downtime.</div>
-
-<div class="pager"><a href="10-aws.html">&larr; 10. AWS Services</a><a href="12-capstone-platform.html">12. Capstone B: End-to-End Platform &rarr;</a></div></main><script src="assets/course.js"></script></body></html>

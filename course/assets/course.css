@@ -31,3 +31,10 @@ figure svg{max-width:100%;height:auto}figcaption{color:var(--mute);font-size:13p
 .pager{display:flex;justify-content:space-between;margin-top:50px}.pager a{color:var(--a);text-decoration:none;font-weight:600}
 @media(max-width:820px){body{display:block}nav.side{position:static;height:auto;width:auto}main{padding:20px}}
 .lb{fill:var(--mute)}.tx{fill:var(--ink)}figure svg text{font-family:inherit}
+.ic{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px;margin-right:8px}
+nav.side a{display:flex;align-items:center}
+.card .t{display:flex;align-items:center}.card .t .ic{width:18px;height:18px;margin-right:8px;color:var(--a)}
+.card.tip .t .ic{color:var(--ok)}.card.warn .t .ic{color:var(--warn)}.card.bad .t .ic{color:var(--bad)}.card.lab .t .ic{color:var(--d)}
+header.hero{position:relative;overflow:hidden}
+.hero-ic{position:absolute;right:26px;top:20px;width:76px;height:76px;fill:none;stroke:#fff;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:.35}
+.tile-ic{width:30px;height:30px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;display:block;margin-bottom:8px}

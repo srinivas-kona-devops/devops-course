@@ -44,8 +44,9 @@ def group(x, y, w, h, title, c='blue'):
 
 
 def fig(w, h, body, cap, label, dg):
+    inner = (DEFS + body).replace('id="ar"', f'id="ar-{dg}"').replace('url(#ar)', f'url(#ar-{dg})')
     return (f'<!--dg:{dg}--><figure><svg viewBox="0 0 {w} {h}" width="{w}" role="img" aria-label="{esc(label)}">'
-            f'{DEFS}{body}</svg><figcaption>{esc(cap)}</figcaption></figure>')
+            f'{inner}</svg><figcaption>{esc(cap)}</figcaption></figure>')
 
 
 def flow(items, bw=100, gap=24, bh=60, y=20, labels=None, fs=13):
@@ -225,7 +226,24 @@ add('10-aws.html', 'Containers: ECR and EKS', fig(w, h, b, 'IRSA: pods get short
 b, w, h = seq(['Developer', 'Git', 'Jenkins', 'ECR', 'EKS\nHelm + Istio', 'Prometheus'],
               [(0, 1, '1 push'), (1, 2, '2 webhook'), (2, 3, '3 push image:TAG'), (2, 4, '4 helm upgrade, canary 10%'),
                (4, 5, '5 Envoy metrics'), (2, 5, '6 query canary 5xx rate'), (2, 4, '7 promote to 100% or rollback')], bw=108)
-add('12-capstone-platform.html', 'Step 5: The Jenkinsfile', fig(w, h, b, 'The pipeline decides from measured error rates, not from hope. Step 7 is gated by the 5xx check and a human approval.', 'Canary pipeline sequence', 'canseq'))
+add('13-capstone-platform.html', 'Step 5: The Jenkinsfile', fig(w, h, b, 'The pipeline decides from measured error rates, not from hope. Step 7 is gated by the 5xx check and a human approval.', 'Canary pipeline sequence', 'canseq'))
+
+
+# ---------- 11 Workflows ----------
+b, w, h = flow([('Push or\nPull request', 'slate'), ('test\npy_compile', 'blue'), ('image\nOIDC + ECR', 'violet'),
+                ('bump\nmanifest', 'amber'), ('Argo CD\nsync dev', 'green'), ('Approve\nthen prod', 'pink')], bw=100, gap=22)
+add('11-workflows.html', 'Anatomy of a workflow', fig(w, h, b, 'Jobs run in parallel unless linked with needs. Environments add approvals and scoped secrets.', 'Actions pipeline', 'ghaflow'))
+b, w, h = seq(['GitHub job', 'GitHub OIDC\nprovider', 'AWS STS', 'Amazon ECR'],
+              [(0, 1, '1 request ID token'), (1, 0, '2 signed JWT (repo, branch)'), (0, 2, '3 AssumeRoleWithWebIdentity'),
+               (2, 0, '4 temporary credentials'), (0, 3, '5 push image')], w=720)
+add('11-workflows.html', 'No stored AWS keys', fig(w, h, b, 'The trust policy on the IAM role decides which repository and branch may assume it.', 'OIDC to AWS', 'gha_oidc'))
+b = (box(10, 25, 100, 50, 'Developer', 'slate') + box(150, 25, 110, 50, 'App repo', 'amber') + box(300, 25, 110, 50, 'CI (Actions)', 'blue')
+     + box(460, 25, 110, 50, 'Registry', 'teal') + box(300, 140, 110, 50, 'Config repo\n(manifests)', 'pink', 12)
+     + box(460, 140, 110, 50, 'Argo CD', 'violet') + box(620, 140, 100, 50, 'Cluster', 'green')
+     + arrow(110, 50, 150, 50) + arrow(260, 50, 300, 50, 'push') + arrow(410, 50, 460, 50, 'image')
+     + arrow(355, 75, 355, 140, 'commit new tag', dy=-6) + arrow(460, 165, 410, 165, 'pull') + arrow(570, 165, 620, 165, 'apply')
+     + text(400, 225, 'Argo CD compares Git with the cluster and reverts manual drift when selfHeal is on.', 12))
+add('11-workflows.html', 'GitOps with Argo CD', fig(740, 240, b, 'Pull-based delivery: the cluster credentials never leave the cluster, and Git is the audit log.', 'GitOps loop', 'gitops'))
 
 
 def main():

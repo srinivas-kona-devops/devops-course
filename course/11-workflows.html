@@ -1,0 +1,189 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>11. CI/CD Workflows | DevOps Course</title><link rel="stylesheet" href="assets/course.css"></head><body><svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><symbol id="i-terminal" viewBox="0 0 24 24"><path d="M4 17l6-6-6-6M12 19h8"/></symbol><symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="9" r="2"/><path d="M6 7v10M18 11c0 4-6 3-12 6"/></symbol><symbol id="i-container" viewBox="0 0 24 24"><path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></symbol><symbol id="i-wheel" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3v6.5M12 14.5V21M4 7.5l5.8 3.3M14.2 13.2l5.8 3.3M4 16.5l5.8-3.3M14.2 10.8l5.8-3.3"/></symbol><symbol id="i-anchor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v14M8 11h8M5 13c0 5 3.5 8 7 8s7-3 7-8"/></symbol><symbol id="i-mesh" viewBox="0 0 24 24"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="12" cy="11" r="1.5"/><path d="M7 6h10M6.5 7.5l4.3 10M17.5 7.5l-4.3 10M12 12.5V17"/></symbol><symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol><symbol id="i-hammer" viewBox="0 0 24 24"><path d="M3 21l9-9M13 4l7 7-3 3-7-7zM9 8l4-4"/></symbol><symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12.5l9 5 9-5M3 17l9 5 9-5"/></symbol><symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 19a4 4 0 010-8 5 5 0 019.6-1A4.5 4.5 0 0117 19z"/></symbol><symbol id="i-rocket" viewBox="0 0 24 24"><path d="M12 3c4 2 6 6 5 11l-5 3-5-3c-1-5 1-9 5-11z"/><circle cx="12" cy="10" r="2"/><path d="M8 17l-3 4M16 17l3 4"/></symbol><symbol id="i-workflow" viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h4a2 2 0 012 2v7"/></symbol><symbol id="i-stack" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="6" rx="1"/><rect x="4" y="11" width="16" height="6" rx="1"/><path d="M8 20h8M8 6h.01M8 14h.01"/></symbol><symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 10a2 2 0 002 3h10a2 2 0 002-3l-5-10V3"/></symbol><symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-4 10c1 1 1 2 1 3h6c0-1 0-2 1-3a6 6 0 00-4-10z"/></symbol><symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></symbol><symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5c-.5-1-1.5-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2s1 1.7 2.5 2 2.5.8 2.5 2-1 2-2.5 2c-1 0-2-.5-2.5-1.5M12 6v2M12 16v2"/></symbol><symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></symbol><symbol id="i-bad" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></symbol><symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol><symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/></symbol></svg><nav class="side"><h2>DevOps Course</h2><a href="index.html"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</a><a href="01-linux.html"><svg class="ic" aria-hidden="true"><use href="#i-terminal"/></svg>1. Linux Admin</a><a href="02-git.html"><svg class="ic" aria-hidden="true"><use href="#i-branch"/></svg>2. Git</a><a href="03-docker.html"><svg class="ic" aria-hidden="true"><use href="#i-container"/></svg>3. Docker</a><a href="04-kubernetes.html"><svg class="ic" aria-hidden="true"><use href="#i-wheel"/></svg>4. Kubernetes</a><a href="05-helm.html"><svg class="ic" aria-hidden="true"><use href="#i-anchor"/></svg>5. Helm</a><a href="06-istio.html"><svg class="ic" aria-hidden="true"><use href="#i-mesh"/></svg>6. Istio</a><a href="07-ansible.html"><svg class="ic" aria-hidden="true"><use href="#i-gear"/></svg>7. Ansible</a><a href="08-jenkins.html"><svg class="ic" aria-hidden="true"><use href="#i-hammer"/></svg>8. Jenkins</a><a href="09-terraform.html"><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg>9. Terraform</a><a href="10-aws.html"><svg class="ic" aria-hidden="true"><use href="#i-cloud"/></svg>10. AWS Services</a><a href="11-workflows.html" class=on><svg class="ic" aria-hidden="true"><use href="#i-workflow"/></svg>11. CI/CD Workflows</a><a href="12-capstone-k8s.html"><svg class="ic" aria-hidden="true"><use href="#i-rocket"/></svg>12. Capstone A: Full App on Kubernetes</a><a href="13-capstone-platform.html"><svg class="ic" aria-hidden="true"><use href="#i-stack"/></svg>13. Capstone B: End-to-End Platform</a></nav><main><header class="hero"><svg class="hero-ic" aria-hidden="true"><use href="#i-workflow"/></svg><h1>11. CI/CD Workflows</h1><p>GitHub Actions, OIDC to AWS, reusable workflows, GitOps with Argo CD</p></header>
+<div class="meta"><span>GitHub Actions</span><span>Argo CD</span><span>~90 min</span></div>
+<div class="card lab"><div class="t"><svg class="ic" aria-hidden="true"><use href="#i-flask"/></svg>Lab goal</div>Automate the path from commit to cluster: test, build, push an image without stored AWS keys, update a config repository, and let Argo CD apply it.</div>
+
+<h2><b>1.</b> Anatomy of a workflow</h2>
+<!--dg:ghaflow--><figure><svg viewBox="0 0 730 100" width="730" role="img" aria-label="Actions pipeline"><defs><marker id="ar-ghaflow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><rect x="10" y="20" width="100" height="60" rx="8" fill="#475085"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="60.0" y="46.8">Push or</tspan><tspan x="60.0" y="62.4">Pull request</tspan></text><line x1="110" y1="50.0" x2="132" y2="50.0" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-ghaflow)"/><rect x="132" y="20" width="100" height="60" rx="8" fill="#6c8cff"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="182.0" y="46.8">test</tspan><tspan x="182.0" y="62.4">py_compile</tspan></text><line x1="232" y1="50.0" x2="254" y2="50.0" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-ghaflow)"/><rect x="254" y="20" width="100" height="60" rx="8" fill="#a78bfa"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="304.0" y="46.8">image</tspan><tspan x="304.0" y="62.4">OIDC + ECR</tspan></text><line x1="354" y1="50.0" x2="376" y2="50.0" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-ghaflow)"/><rect x="376" y="20" width="100" height="60" rx="8" fill="#f59e0b"/><text font-size="13" fill="#0a0d1a" text-anchor="middle"><tspan x="426.0" y="46.8">bump</tspan><tspan x="426.0" y="62.4">manifest</tspan></text><line x1="476" y1="50.0" x2="498" y2="50.0" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-ghaflow)"/><rect x="498" y="20" width="100" height="60" rx="8" fill="#34d399"/><text font-size="13" fill="#0a0d1a" text-anchor="middle"><tspan x="548.0" y="46.8">Argo CD</tspan><tspan x="548.0" y="62.4">sync dev</tspan></text><line x1="598" y1="50.0" x2="620" y2="50.0" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-ghaflow)"/><rect x="620" y="20" width="100" height="60" rx="8" fill="#f472b6"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="670.0" y="46.8">Approve</tspan><tspan x="670.0" y="62.4">then prod</tspan></text></svg><figcaption>Jobs run in parallel unless linked with needs. Environments add approvals and scoped secrets.</figcaption></figure>
+<table><tr><th>Term</th><th>Meaning</th></tr>
+<tr><td>Workflow</td><td>A YAML file in <code>.github/workflows/</code></td></tr>
+<tr><td>Event (<code>on</code>)</td><td>What starts it: <code>push</code>, <code>pull_request</code>, <code>schedule</code>, <code>workflow_dispatch</code>, <code>release</code></td></tr>
+<tr><td>Job</td><td>A set of steps on one runner; jobs run in parallel unless linked by <code>needs</code></td></tr>
+<tr><td>Step</td><td>A shell command (<code>run</code>) or a reusable action (<code>uses</code>)</td></tr>
+<tr><td>Runner</td><td>The machine: GitHub-hosted (<code>ubuntu-24.04</code>) or your own self-hosted</td></tr>
+<tr><td>Environment</td><td>Named target (dev, prod) with approvals and its own secrets</td></tr></table>
+
+<h2><b>2.</b> First CI workflow</h2>
+<div class="cmd"><span class="lang">yaml</span><pre><code>mkdir -p .github/workflows
+cat &gt; .github/workflows/ci.yml &lt;&lt;'EOT'
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -r api/requirements.txt
+      - run: python -m py_compile api/app.py
+  chart:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint chart --set db.password=x
+EOT</code></pre></div>
+<div class="card tip"><div class="t"><svg class="ic" aria-hidden="true"><use href="#i-bulb"/></svg>Least privilege by default</div>Set <code>permissions: contents: read</code> at the top and grant more only to the job that needs it. Pin third-party actions to a full commit SHA in production, because tags can be moved.</div>
+
+<h2><b>2a.</b> Anatomy of a workflow run</h2>
+<p>A pull request runs <code>test</code> and <code>chart</code> in parallel. A merge to <code>main</code> adds the image build and the deploy stages in the next sections.</p>
+
+<h2><b>3.</b> No stored AWS keys (OIDC)</h2>
+<!--dg:gha_oidc--><figure><svg viewBox="0 0 720 260" width="720" role="img" aria-label="OIDC to AWS"><defs><marker id="ar-gha_oidc" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><line x1="90.0" y1="48" x2="90.0" y2="254" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="30.0" y="8" width="120" height="40" rx="8" fill="#6c8cff"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="90.0" y="32.2">GitHub job</tspan></text><line x1="270.0" y1="48" x2="270.0" y2="254" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="210.0" y="8" width="120" height="40" rx="8" fill="#a78bfa"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="270.0" y="25.0">GitHub OIDC</tspan><tspan x="270.0" y="39.4">provider</tspan></text><line x1="450.0" y1="48" x2="450.0" y2="254" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="390.0" y="8" width="120" height="40" rx="8" fill="#f472b6"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="450.0" y="32.2">AWS STS</tspan></text><line x1="630.0" y1="48" x2="630.0" y2="254" stroke="#9aa3c7" stroke-dasharray="4" opacity=".5"/><rect x="570.0" y="8" width="120" height="40" rx="8" fill="#f59e0b"/><text font-size="12" fill="#0a0d1a" text-anchor="middle"><tspan x="630.0" y="32.2">Amazon ECR</tspan></text><line x1="94.0" y1="86" x2="266.0" y2="86" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-gha_oidc)"/><text x="180.0" y="80.0" font-size="11" text-anchor="middle" class="lb" >1 request ID token</text><line x1="266.0" y1="124" x2="94.0" y2="124" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-gha_oidc)"/><text x="180.0" y="118.0" font-size="11" text-anchor="middle" class="lb" >2 signed JWT (repo, branch)</text><line x1="94.0" y1="162" x2="446.0" y2="162" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-gha_oidc)"/><text x="270.0" y="156.0" font-size="11" text-anchor="middle" class="lb" >3 AssumeRoleWithWebIdentity</text><line x1="446.0" y1="200" x2="94.0" y2="200" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-gha_oidc)"/><text x="270.0" y="194.0" font-size="11" text-anchor="middle" class="lb" >4 temporary credentials</text><line x1="94.0" y1="238" x2="626.0" y2="238" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-gha_oidc)"/><text x="360.0" y="232.0" font-size="11" text-anchor="middle" class="lb" >5 push image</text></svg><figcaption>The trust policy on the IAM role decides which repository and branch may assume it.</figcaption></figure>
+<p>Long-lived access keys in repository secrets are a common cause of cloud breaches. With OpenID Connect, each job requests a short-lived token and AWS exchanges it for temporary credentials.</p>
+<div class="cmd"><span class="lang">bash</span><pre><code>ACCT=$(aws sts get-caller-identity --query Account --output text)
+aws iam create-open-id-connect-provider --url https://token.actions.githubusercontent.com \
+  --client-id-list sts.amazonaws.com    <span class="c"># skip if your account already has it</span>
+cat &gt; /tmp/gha-trust.json &lt;&lt;EOT
+{"Version":"2012-10-17","Statement":[{
+  "Effect":"Allow",
+  "Principal":{"Federated":"arn:aws:iam::${ACCT}:oidc-provider/token.actions.githubusercontent.com"},
+  "Action":"sts:AssumeRoleWithWebIdentity",
+  "Condition":{
+    "StringEquals":{"token.actions.githubusercontent.com:aud":"sts.amazonaws.com"},
+    "StringLike":{"token.actions.githubusercontent.com:sub":"repo:YOUR_ORG/YOUR_REPO:ref:refs/heads/main"}}}]}
+EOT
+aws iam create-role --role-name gha-ecr-push --assume-role-policy-document file:///tmp/gha-trust.json
+aws iam attach-role-policy --role-name gha-ecr-push --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser</code></pre></div>
+<div class="card warn"><div class="t"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Security: scope the subject claim</div>The <code>sub</code> condition is what stops other repositories from assuming your role. Always restrict it to your repository and branch or environment. <code>PowerUser</code> on ECR is broad for a lab; write a policy limited to one repository for real use.</div>
+
+<h2><b>4.</b> Build and push the image</h2>
+<div class="cmd"><span class="lang">yaml</span><pre><code>cat &gt; .github/workflows/release.yml &lt;&lt;'EOT'
+name: release
+on:
+  push:
+    branches: [main]
+    paths: ["api/**"]
+permissions:
+  id-token: write      # required for OIDC
+  contents: read
+env:
+  AWS_REGION: ap-south-1
+  REPO: todo-api
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/gha-ecr-push
+          aws-region: ${{ env.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - id: meta
+        run: echo "tag=${GITHUB_SHA::8}" &gt;&gt; "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: api
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.REPO }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+EOT</code></pre></div>
+<p>Store the account ID as a repository <b>variable</b> (<code>vars.AWS_ACCOUNT_ID</code>); it is an identifier, not a secret.</p>
+
+<h2><b>5.</b> Environments, approvals, reusable workflows</h2>
+<div class="cmd"><span class="lang">yaml</span><pre><code>cat &gt; .github/workflows/deploy.yml &lt;&lt;'EOT'
+name: deploy
+on:
+  workflow_call:
+    inputs:
+      env: {type: string, required: true}
+      tag: {type: string, required: true}
+jobs:
+  bump:
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.env }}      # prod can require reviewers in repository settings
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: YOUR_ORG/todo-config
+          token: ${{ secrets.CONFIG_REPO_TOKEN }}
+      - run: |
+          sed -i "s|^\(\s*tag:\).*|\1 \"${{ inputs.tag }}\"|" envs/${{ inputs.env }}/values.yaml
+          git config user.name "ci-bot" &amp;&amp; git config user.email "ci-bot@users.noreply.github.com"
+          git commit -am "deploy ${{ inputs.env }}: ${{ inputs.tag }}" &amp;&amp; git push
+EOT
+<span class="c"># call it from release.yml, after the image job:</span>
+<span class="c">#   deploy-dev:  {needs: image, uses: ./.github/workflows/deploy.yml, with: {env: dev,  tag: "${{ needs.image.outputs.tag }}"}, secrets: inherit}</span>
+<span class="c">#   deploy-prod: {needs: deploy-dev, uses: ./.github/workflows/deploy.yml, with: {env: prod, tag: "${{ needs.image.outputs.tag }}"}, secrets: inherit}</span></code></pre></div>
+<div class="card"><div class="t"><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Why a separate config repository</div>Keeping manifests apart from application code means a deploy is a small, reviewable commit, and the app pipeline never needs cluster credentials.</div>
+
+<h2><b>6.</b> GitOps with Argo CD</h2>
+<!--dg:gitops--><figure><svg viewBox="0 0 740 240" width="740" role="img" aria-label="GitOps loop"><defs><marker id="ar-gitops" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#9aa3c7"/></marker></defs><rect x="10" y="25" width="100" height="50" rx="8" fill="#475085"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="60.0" y="54.5">Developer</tspan></text><rect x="150" y="25" width="110" height="50" rx="8" fill="#f59e0b"/><text font-size="13" fill="#0a0d1a" text-anchor="middle"><tspan x="205.0" y="54.5">App repo</tspan></text><rect x="300" y="25" width="110" height="50" rx="8" fill="#6c8cff"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="355.0" y="54.5">CI (Actions)</tspan></text><rect x="460" y="25" width="110" height="50" rx="8" fill="#2dd4bf"/><text font-size="13" fill="#0a0d1a" text-anchor="middle"><tspan x="515.0" y="54.5">Registry</tspan></text><rect x="300" y="140" width="110" height="50" rx="8" fill="#f472b6"/><text font-size="12" fill="#fff" text-anchor="middle"><tspan x="355.0" y="162.0">Config repo</tspan><tspan x="355.0" y="176.4">(manifests)</tspan></text><rect x="460" y="140" width="110" height="50" rx="8" fill="#a78bfa"/><text font-size="13" fill="#fff" text-anchor="middle"><tspan x="515.0" y="169.6">Argo CD</tspan></text><rect x="620" y="140" width="100" height="50" rx="8" fill="#34d399"/><text font-size="13" fill="#0a0d1a" text-anchor="middle"><tspan x="670.0" y="169.6">Cluster</tspan></text><line x1="110" y1="50" x2="150" y2="50" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-gitops)"/><line x1="260" y1="50" x2="300" y2="50" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-gitops)"/><text x="280.0" y="44.0" font-size="11" text-anchor="middle" class="lb" >push</text><line x1="410" y1="50" x2="460" y2="50" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-gitops)"/><text x="435.0" y="44.0" font-size="11" text-anchor="middle" class="lb" >image</text><line x1="355" y1="75" x2="355" y2="140" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-gitops)"/><text x="355.0" y="101.5" font-size="11" text-anchor="middle" class="lb" >commit new tag</text><line x1="460" y1="165" x2="410" y2="165" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-gitops)"/><text x="435.0" y="159.0" font-size="11" text-anchor="middle" class="lb" >pull</text><line x1="570" y1="165" x2="620" y2="165" stroke="#9aa3c7" stroke-width="2" marker-end="url(#ar-gitops)"/><text x="595.0" y="159.0" font-size="11" text-anchor="middle" class="lb" >apply</text><text x="400" y="225" font-size="12" text-anchor="middle" class="lb" >Argo CD compares Git with the cluster and reverts manual drift when selfHeal is on.</text></svg><figcaption>Pull-based delivery: the cluster credentials never leave the cluster, and Git is the audit log.</figcaption></figure>
+<div class="cmd"><span class="lang">bash</span><pre><code>kubectl create namespace argocd
+kubectl apply -n argocd --server-side -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl -n argocd rollout status deploy/argocd-server
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+kubectl -n argocd port-forward svc/argocd-server 8443:443 &amp;      <span class="c"># https://localhost:8443, user admin</span>
+cat &gt; app.yaml &lt;&lt;'EOT'
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: {name: todo-dev, namespace: argocd}
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_ORG/todo-config.git
+    targetRevision: main
+    path: envs/dev
+  destination: {server: https://kubernetes.default.svc, namespace: todo-dev}
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true]
+EOT
+kubectl apply -f app.yaml
+kubectl -n argocd get applications
+<span class="c"># prove self-healing: change something by hand, Argo CD reverts it</span>
+kubectl -n todo-dev scale deploy --all --replicas=7; sleep 30; kubectl -n todo-dev get deploy</code></pre></div>
+<table><tr><th>Setting</th><th>Effect</th></tr>
+<tr><td><code>prune: true</code></td><td>Delete cluster objects that were removed from Git</td></tr>
+<tr><td><code>selfHeal: true</code></td><td>Revert manual changes to match Git</td></tr>
+<tr><td>Disable <code>automated</code> for prod</td><td>Require a manual sync button for production</td></tr></table>
+
+<h2><b>7.</b> Self-hosted runners and local testing</h2>
+<div class="cmd"><span class="lang">bash</span><pre><code><span class="c"># run workflows locally in Docker (approximate, not identical to GitHub)</span>
+curl -s https://raw.githubusercontent.com/nektos/act/master/install.sh | bash -s -- -b /usr/local/bin
+act pull_request -j test
+<span class="c"># lint workflow files before pushing</span>
+docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest
+<span class="c"># self-hosted runner: Settings, Actions, Runners, New self-hosted runner shows the exact commands and a one-time token</span></code></pre></div>
+<div class="card warn"><div class="t"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Security: self-hosted runners</div>Never attach a self-hosted runner to a public repository: anyone who can open a pull request could run code on it. Use ephemeral runners (for example Actions Runner Controller on Kubernetes) so each job starts clean.</div>
+
+<h2><b>8.</b> Hardening checklist</h2>
+<table><tr><th>Risk</th><th>Control</th></tr>
+<tr><td>Stolen cloud keys</td><td>OIDC with a narrow <code>sub</code> condition</td></tr>
+<tr><td>Over-permissive token</td><td>Explicit <code>permissions:</code> per workflow or job</td></tr>
+<tr><td>Compromised third-party action</td><td>Pin to commit SHA, enable Dependabot for actions</td></tr>
+<tr><td>Script injection</td><td>Never place <code>${{ github.event.* }}</code> text directly inside <code>run:</code>; pass it through <code>env:</code></td></tr>
+<tr><td>Accidental production deploy</td><td>Environment with required reviewers and branch rules</td></tr>
+<tr><td>Forked pull requests</td><td>Secrets are not exposed to forks; avoid <code>pull_request_target</code> with untrusted code</td></tr></table>
+<div class="card tip"><div class="t"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Checkpoint</div>A pull request runs tests in a matrix, a merge builds and pushes an image using OIDC, a config commit follows, and Argo CD applies it and reverts a manual scale.</div>
+<div class="pager"><a href="10-aws.html">&larr; 10. AWS Services</a><a href="12-capstone-k8s.html">12. Capstone A: Full App on Kubernetes &rarr;</a></div></main><script src="assets/course.js"></script></body></html>
